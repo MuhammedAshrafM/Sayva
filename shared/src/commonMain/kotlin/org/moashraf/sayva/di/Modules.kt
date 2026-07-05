@@ -54,6 +54,7 @@ import org.moashraf.sayva.ml.PreprocessorRegistry
 import org.moashraf.sayva.ml.adapters.SingleHandKazuhitoPreprocessor
 import org.moashraf.sayva.ml.adapters.TfliteRuntimeAdapter
 import org.moashraf.sayva.ml.adapters.TwoHandSequencePreprocessor
+import org.moashraf.sayva.startup.AppStartupCoordinator
 import org.moashraf.sayva.ui.viewmodel.LiveCameraViewModel
 import org.moashraf.sayva.telemetry.AnalyticsGateway
 import org.moashraf.sayva.telemetry.CrashReporter
@@ -228,7 +229,13 @@ val sayvaModule = module {
     single { LearnViewModel(get(), get(), get()) }
     // Auth VM is shared across Login/Register/ForgotPassword/ResetEmailSent so
     // form state (typed email) persists across screen transitions in the flow.
-    single { AuthViewModel(get(), get(), get()) }
+    single { AuthViewModel(get(), get(), get(), get()) }
+
+    // ---- Startup coordinator ------------------------------------------------
+    // Resolves the app's initial destination from persisted auth + onboarding
+    // state on cold start. App.kt renders a splash while Resolving, then
+    // constructs the nav controller with the resolved destination.
+    single { AppStartupCoordinator(authGateway = get(), settingsRepository = get()) }
 
     // Live camera / recognition — owns the pipeline lifecycle.
     single {

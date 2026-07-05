@@ -34,6 +34,14 @@ interface SettingsRepository {
     fun setRecognitionLanguageCode(code: String?)
     fun setOutputLanguageCode(code: String?)
 
+    /**
+     * Set once the user has completed the initial onboarding flow
+     * (Welcome → HowAiWorks → TwoWayIntro → Permissions → Login/Register).
+     * Consumed by the startup coordinator — a returning user who signed out
+     * lands on Login, not on Welcome, so they don't re-walk the tutorial.
+     */
+    fun setOnboardingCompleted(completed: Boolean)
+
     // Accessibility
     fun setEasyMode(enabled: Boolean)
     fun setLargerText(enabled: Boolean)
@@ -72,6 +80,10 @@ data class SettingsState(
     // concrete pack + output code at read time.
     val recognitionLanguageCode: String? = null,
     val outputLanguageCode: String? = null,
+
+    // `true` once the user has finished the first-run onboarding flow.
+    // Read by the startup coordinator to decide the initial destination.
+    val onboardingCompleted: Boolean = false,
 
     // Accessibility
     val easyMode: Boolean = false,

@@ -68,6 +68,11 @@ class SettingsRepositoryImpl(
         it.copy(outputLanguageCode = code)
     }
 
+    override fun setOnboardingCompleted(completed: Boolean) = update {
+        storage.putBoolean(K_ONBOARDING_COMPLETED, completed)
+        it.copy(onboardingCompleted = completed)
+    }
+
     override fun setEasyMode(enabled: Boolean) = update {
         storage.putBoolean(K_EASY_MODE, enabled)
         it.copy(easyMode = enabled)
@@ -112,6 +117,7 @@ class SettingsRepositoryImpl(
             K_LARGER_TEXT, K_COLOR_BLIND, K_LEFT_HANDED, K_HAPTIC,
             K_REDUCE_MOTION, K_SCREEN_READER_HINTS,
             K_RECOGNITION_LANGUAGE, K_OUTPUT_LANGUAGE,
+            K_ONBOARDING_COMPLETED,
         ).forEach(storage::remove)
         _state.value = SettingsState()
     }
@@ -146,6 +152,8 @@ class SettingsRepositoryImpl(
                 ?: defaults.screenReaderHints,
             recognitionLanguageCode = storage.getString(K_RECOGNITION_LANGUAGE),
             outputLanguageCode = storage.getString(K_OUTPUT_LANGUAGE),
+            onboardingCompleted = storage.getBoolean(K_ONBOARDING_COMPLETED)
+                ?: defaults.onboardingCompleted,
         )
     }
 
@@ -166,5 +174,6 @@ class SettingsRepositoryImpl(
         const val K_SCREEN_READER_HINTS = "a11y.screenReaderHints"
         const val K_RECOGNITION_LANGUAGE = "languagepack.recognitionCode"
         const val K_OUTPUT_LANGUAGE = "languagepack.outputCode"
+        const val K_ONBOARDING_COMPLETED = "onboarding.completed"
     }
 }

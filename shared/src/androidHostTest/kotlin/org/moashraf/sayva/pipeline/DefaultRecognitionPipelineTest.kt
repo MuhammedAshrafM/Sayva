@@ -417,5 +417,8 @@ private class PipelineFakeSettings(initial: SettingsState = SettingsState()) : S
     override fun setHapticIntensity(intensity: Float) {}
     override fun setReduceMotion(enabled: Boolean) {}
     override fun setScreenReaderHints(enabled: Boolean) {}
+    override fun setOnboardingCompleted(completed: Boolean) {
+        _state.value = _state.value.copy(onboardingCompleted = completed)
+    }
     override fun resetToDefaults() { _state.value = SettingsState() }
 }

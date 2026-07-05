@@ -3,9 +3,14 @@ package org.moashraf.sayva
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
@@ -14,7 +19,9 @@ import org.moashraf.sayva.di.sayvaModule
 import org.moashraf.sayva.languagepack.LanguagePackController
 import org.moashraf.sayva.nav.Screen
 import org.moashraf.sayva.nav.SayvaNavController
+import org.moashraf.sayva.nav.SystemBackHandler
 import org.moashraf.sayva.nav.rememberSayvaNavController
+import org.moashraf.sayva.startup.AppStartupCoordinator
 import org.moashraf.sayva.telemetry.AnalyticsEvents
 import org.moashraf.sayva.telemetry.AnalyticsGateway
 import org.moashraf.sayva.telemetry.CrashReporter
@@ -80,49 +87,87 @@ private val bottomNavRoots = setOf(
 fun App() {
     KoinApplication(application = { modules(sayvaModule) }) {
         SayvaTheme {
-            val nav = rememberSayvaNavController()
-            val current = nav.current
+            // Startup routing — resolve the initial destination BEFORE
+            // constructing the nav controller so returning users skip Welcome.
+            // While Resolving we render a neutral splash so no wrong-screen
+            // flicker leaks. See AppStartupCoordinator for policy.
+            val startup: AppStartupCoordinator = koinInject()
+            val startupState by startup.state.collectAsState()
+            LaunchedEffect(Unit) { startup.resolve() }
 
-            // Language Pack bootstrap — fires once at app start. Populates
-            // the pack registry from Compose Resources and applies the
-            // persisted (or MVP-default) recognition + output languages.
-            // Screens that read `LanguagePackController.state` show a
-            // loading placeholder until this completes; everything else
-            // (auth, favorites, history, settings, learn) works uninterrupted.
-            val packController: LanguagePackController = koinInject()
-            LaunchedEffect(Unit) {
-                packController.bootstrap()
-            }
-
-            // Screen-view + breadcrumb tracking — fires on every navigation.
-            // Placed here so no per-screen wiring is required and the analytics
-            // hit and Crashlytics breadcrumb use identical names.
-            val analytics: AnalyticsGateway = koinInject()
-            val crashReporter: CrashReporter = koinInject()
-            LaunchedEffect(current) {
-                val name = current.analyticsName()
-                analytics.logScreenView(name)
-                analytics.logEvent(
-                    AnalyticsEvents.SCREEN_VIEWED,
-                    mapOf(AnalyticsEvents.Param.SCREEN_NAME to name),
+            when (val s = startupState) {
+                AppStartupCoordinator.StartupState.Resolving -> StartupSplash()
+                is AppStartupCoordinator.StartupState.Ready -> ResolvedApp(
+                    initialDestination = s.initialDestination,
                 )
-                crashReporter.setKey("current_screen", name)
-                crashReporter.log("nav → $name")
             }
+        }
+    }
+}
 
-            Surface(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.weight(1f).fillMaxSize()) {
-                        RenderScreen(nav, current)
-                    }
-                    if (current::class in bottomNavRoots) {
-                        SayvaBottomNav(
-                            current = current,
-                            onSelect = { tab -> nav.replaceAll(tab.screen) },
-                        )
-                    }
-                }
+@Composable
+private fun ResolvedApp(initialDestination: Screen) {
+    val nav = rememberSayvaNavController(start = initialDestination)
+    val current = nav.current
+
+    // Route Android system Back through our nav stack. When at the root
+    // screen (canGoBack == false), yield to the platform default so the
+    // Activity finishes normally — matching Android convention.
+    SystemBackHandler(enabled = nav.canGoBack) { nav.back() }
+
+    // Language Pack bootstrap — fires once at app start. Populates
+    // the pack registry from Compose Resources and applies the
+    // persisted (or MVP-default) recognition + output languages.
+    // Screens that read `LanguagePackController.state` show a
+    // loading placeholder until this completes; everything else
+    // (auth, favorites, history, settings, learn) works uninterrupted.
+    val packController: LanguagePackController = koinInject()
+    LaunchedEffect(Unit) {
+        packController.bootstrap()
+    }
+
+    // Screen-view + breadcrumb tracking — fires on every navigation.
+    // Placed here so no per-screen wiring is required and the analytics
+    // hit and Crashlytics breadcrumb use identical names.
+    val analytics: AnalyticsGateway = koinInject()
+    val crashReporter: CrashReporter = koinInject()
+    LaunchedEffect(current) {
+        val name = current.analyticsName()
+        analytics.logScreenView(name)
+        analytics.logEvent(
+            AnalyticsEvents.SCREEN_VIEWED,
+            mapOf(AnalyticsEvents.Param.SCREEN_NAME to name),
+        )
+        crashReporter.setKey("current_screen", name)
+        crashReporter.log("nav → $name")
+    }
+
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                RenderScreen(nav, current)
             }
+            if (current::class in bottomNavRoots) {
+                SayvaBottomNav(
+                    current = current,
+                    onSelect = { tab -> nav.replaceAll(tab.screen) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Neutral splash rendered while [AppStartupCoordinator] resolves the
+ * initial destination. Kept intentionally minimal — the production
+ * splash (branding + animated logo) belongs in a future design task,
+ * not the startup plumbing.
+ */
+@Composable
+private fun StartupSplash() {
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
         }
     }
 }

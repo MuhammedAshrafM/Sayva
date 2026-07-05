@@ -14,6 +14,7 @@ import org.moashraf.sayva.auth.AuthError
 import org.moashraf.sayva.auth.AuthException
 import org.moashraf.sayva.auth.AuthGateway
 import org.moashraf.sayva.auth.User
+import org.moashraf.sayva.data.repository.SettingsRepository
 import org.moashraf.sayva.telemetry.AnalyticsEvents
 import org.moashraf.sayva.telemetry.AnalyticsGateway
 import org.moashraf.sayva.telemetry.CrashReporter
@@ -40,6 +41,7 @@ class AuthViewModel(
     private val gateway: AuthGateway,
     private val analytics: AnalyticsGateway,
     private val crashReporter: CrashReporter,
+    private val settingsRepository: SettingsRepository,
 ) {
     // Handler catches unexpected throwables from any of the launched actions
     // and files them as non-fatal crashes — the UI's `state.error` only carries
@@ -142,6 +144,12 @@ class AuthViewModel(
                             mapOf(AnalyticsEvents.Param.BACKEND to backendLabel),
                         )
                     }
+                    // Any successful auth event (sign-in / register / guest)
+                    // implies the user has been through the onboarding tour.
+                    // Persist so future cold starts route to Login (or Home
+                    // if session persists) instead of Welcome — the startup
+                    // coordinator reads this flag.
+                    settingsRepository.setOnboardingCompleted(true)
                     // currentUser Flow will pick up the new session; screens
                     // observing it will navigate. We just clear the loading flag.
                     _state.update { it.copy(isLoading = false, password = "") }
