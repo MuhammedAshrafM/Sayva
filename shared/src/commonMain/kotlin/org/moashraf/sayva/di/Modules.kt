@@ -238,6 +238,7 @@ val sayvaModule = module {
             signRecognizerFactory = get(),
             translationRenderer = get(),
             packController = get(),
+            permissionController = get(),
             analytics = get(),
             crashReporter = get(),
         )

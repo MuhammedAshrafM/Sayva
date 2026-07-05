@@ -123,6 +123,10 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            // Test-only: TestScope, runTest, UnconfinedTestDispatcher for
+            // deterministic testing of pipeline coroutines that internally
+            // use Dispatchers.Default / Dispatchers.Main.
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

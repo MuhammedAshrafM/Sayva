@@ -20,6 +20,14 @@ sealed class RecognitionUiState {
     data object Starting : RecognitionUiState()
 
     /**
+     * User hasn't granted camera permission yet. The pipeline never
+     * started — this state comes from [LiveCameraViewModel]'s pre-check
+     * before calling `pipeline.start()`. Screen shows a Grant Access
+     * button that routes to the existing PermissionsScreen.
+     */
+    data object CameraPermissionRequired : RecognitionUiState()
+
+    /**
      * Active pack doesn't advertise the requested capability. UI should
      * disable the mode selector for this role and show a hint like
      * "This language pack doesn't include sign recognition yet."

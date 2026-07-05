@@ -36,6 +36,7 @@ import org.moashraf.sayva.designsystem.SymbolIcon
 import org.moashraf.sayva.designsystem.Tertiary50
 import org.moashraf.sayva.languagepack.ConfidenceBucket
 import org.moashraf.sayva.languagepack.RecognitionRole
+import org.moashraf.sayva.nav.Screen
 import org.moashraf.sayva.nav.SayvaNavController
 import org.moashraf.sayva.pipeline.Prediction
 import org.moashraf.sayva.pipeline.RecognitionUiState
@@ -82,18 +83,73 @@ fun LiveCameraScreen(nav: SayvaNavController) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        CameraPreview(controller = camera, modifier = Modifier.fillMaxSize())
+        // Only draw the preview when we're past the permission gate — pinning
+        // the AndroidView while the OS is showing a permission dialog can
+        // cause CameraX to bind against a not-yet-permitted lifecycle.
+        if (state !is RecognitionUiState.CameraPermissionRequired) {
+            CameraPreview(controller = camera, modifier = Modifier.fillMaxSize())
+        }
 
         // Top bar — pack chip + close button.
         TopBar(nav = nav, state = state, modifier = Modifier.align(Alignment.TopCenter))
 
-        // Bottom — recognition result + confidence + mode selector.
-        BottomOverlay(
-            state = state,
-            supportedRoles = viewModel.supportedRoles,
-            onModeSelected = { viewModel.setMode(it) },
-            modifier = Modifier.align(Alignment.BottomCenter),
+        if (state is RecognitionUiState.CameraPermissionRequired) {
+            CameraPermissionGate(
+                onGrantAccess = { nav.navigate(Screen.Permissions) },
+                modifier = Modifier.align(Alignment.Center),
+            )
+        } else {
+            // Bottom — recognition result + confidence + mode selector.
+            BottomOverlay(
+                state = state,
+                supportedRoles = viewModel.supportedRoles,
+                onModeSelected = { viewModel.setMode(it) },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+    }
+}
+
+/**
+ * Full-screen affordance when camera permission hasn't been granted. Kept
+ * simple in the dev UI; the production redesign (P2-S7) rehydrates this in
+ * the Sayva design language.
+ */
+@Composable
+private fun CameraPermissionGate(
+    onGrantAccess: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        SymbolIcon(name = "photo_camera", size = 48.dp, color = Color.White)
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Camera access needed",
+            color = Color.White,
+            style = MaterialTheme.typography.titleLarge,
         )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Sayva needs your camera to recognize signs. Nothing leaves your device.",
+            color = Color.White.copy(alpha = 0.75f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.height(24.dp))
+        Box(
+            modifier = Modifier
+                .background(Color.White, RoundedCornerShape(100))
+                .clickable { onGrantAccess() }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+        ) {
+            Text(
+                "Grant access",
+                color = Color.Black,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
     }
 }
 
@@ -151,7 +207,11 @@ private fun BottomOverlay(
     ) {
         when (state) {
             RecognitionUiState.Idle,
-            RecognitionUiState.Starting -> {
+            RecognitionUiState.Starting,
+            RecognitionUiState.CameraPermissionRequired -> {
+                // CameraPermissionRequired is handled by the full-screen
+                // affordance in `LiveCameraScreen`; we render a neutral
+                // placeholder here so the bottom overlay branch stays valid.
                 Text("Starting camera…", color = Color.White.copy(alpha = 0.75f))
             }
             is RecognitionUiState.NoModelForMode -> {
@@ -277,6 +337,7 @@ private fun DiagnosticsChip(state: RecognitionUiState) {
  */
 private fun packChipText(state: RecognitionUiState): String = when (state) {
     RecognitionUiState.Idle, RecognitionUiState.Starting -> "· starting"
+    RecognitionUiState.CameraPermissionRequired -> "· permission needed"
     is RecognitionUiState.NoModelForMode -> "${state.packCode.uppercase()} · no model"
     is RecognitionUiState.Recognizing -> "${state.packCode.uppercase()} · ${prettyRoleName(state.role)}"
     is RecognitionUiState.Error -> "error"
