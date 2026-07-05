@@ -2,6 +2,8 @@ import com.codingfeline.buildkonfig.compiler.FieldSpec
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
 import org.gradle.jvm.toolchain.JavaToolchainService
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -180,6 +182,106 @@ val regeneratePacks = tasks.register<Exec>("regeneratePacks") {
 }
 
 tasks.named("check").configure { dependsOn(verifyPacks) }
+
+// ---------------------------------------------------------------------------
+// MediaPipe HandLandmarker model — auto-fetch during Android build
+// ---------------------------------------------------------------------------
+//
+// The recognition pipeline's HandDetector on Android loads
+// `hand_landmarker.task` from `src/androidMain/assets/mediapipe/`. The file
+// is a ~7 MB binary maintained by Google (and rotated occasionally as they
+// re-train the landmark model), so we do NOT commit it to git — every
+// developer / CI runner fetches it once via this task.
+//
+// The task downloads only when the target file is absent OR its SHA-256
+// doesn't match the pinned value below. Otherwise it's a no-op. That keeps
+// clean builds fast (~0ms verify) and offline-safe.
+//
+// Wired as an input to `mergeAndroidMainAssets` so `assembleDebug`/`assemble`
+// pull it automatically on a fresh clone. No `curl` step in the README, no
+// manual CI setup — checkout, build, run.
+val handLandmarkerUrl = uri(
+    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+)
+// SHA-256 of the pinned model version. If the download's hash differs we
+// refuse to write it — protects against a compromised CDN swapping bytes.
+// Set to empty string to skip verification during development if Google
+// rotates the file and we need to re-pin.
+// Pinned SHA-256 of the MediaPipe hand_landmarker.task binary Google served at
+// the URL above. Verified on the first successful download on 2026-07-06. If
+// Google republishes the file the download task will refuse to write the new
+// bytes; re-pin here after confirming the new hash against a trusted source.
+val handLandmarkerSha256 = "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
+val handLandmarkerAsset = layout.projectDirectory
+    .file("src/androidMain/assets/mediapipe/hand_landmarker.task")
+
+val downloadHandLandmarkerModel = tasks.register("downloadHandLandmarkerModel") {
+    group = "build setup"
+    description = "Downloads MediaPipe HandLandmarker model into androidMain/assets if missing."
+
+    // Capture as locals so the configuration cache can serialize the task
+    // action without dragging in Gradle-script object references.
+    val destFile = handLandmarkerAsset.asFile
+    val expectedSha = handLandmarkerSha256
+    val sourceUrlString = handLandmarkerUrl.toString()
+    val rootDirValue = rootDir
+
+    outputs.file(destFile)
+    outputs.upToDateWhen {
+        if (!destFile.exists()) return@upToDateWhen false
+        if (expectedSha.isEmpty()) return@upToDateWhen true
+        HandLandmarkerDigest.sha256(destFile).equals(expectedSha, ignoreCase = true)
+    }
+
+    doLast {
+        destFile.parentFile.mkdirs()
+        val url = URI(sourceUrlString).toURL()
+        val tempFile = destFile.resolveSibling(destFile.name + ".part")
+        println("Downloading MediaPipe HandLandmarker model from $url")
+        url.openStream().use { input ->
+            tempFile.outputStream().use { output -> input.copyTo(output) }
+        }
+        val actualSha = HandLandmarkerDigest.sha256(tempFile)
+        if (expectedSha.isNotEmpty() && !actualSha.equals(expectedSha, ignoreCase = true)) {
+            tempFile.delete()
+            throw GradleException(
+                "MediaPipe HandLandmarker checksum mismatch. Expected $expectedSha, got $actualSha. " +
+                    "If Google published a new model, verify manually and update `handLandmarkerSha256` in shared/build.gradle.kts."
+            )
+        }
+        if (destFile.exists()) destFile.delete()
+        tempFile.renameTo(destFile)
+        println(
+            "Wrote ${destFile.relativeTo(rootDirValue)} (${destFile.length() / 1024} KB, sha256=$actualSha)"
+        )
+    }
+}
+
+// Hook the download into every Android asset-merging path so `assembleDebug`,
+// `assembleRelease`, and instrumented-test builds all get the asset without
+// developers thinking about it. Wildcard match survives AGP renames.
+tasks.matching { it.name.startsWith("merge") && it.name.contains("Assets") }.configureEach {
+    dependsOn(downloadHandLandmarkerModel)
+}
+
+// Compute lowercase-hex SHA-256 of a file. Lives on an `object` (not a script
+// top-level fun) so `downloadHandLandmarkerModel`'s captured references stay
+// serializable under the Gradle configuration cache — top-level script fun's
+// carry a Project reference which the cache refuses to store.
+object HandLandmarkerDigest {
+    fun sha256(file: java.io.File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+    }
+}
 
 // Compile-time constants surfaced as `org.moashraf.sayva.buildkonfig.BuildKonfig`.
 // Values come from local.properties (gitignored) so keys never land in the tracked
