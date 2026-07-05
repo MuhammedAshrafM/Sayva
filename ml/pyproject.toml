@@ -1,0 +1,85 @@
+[project]
+name = "sayva-ml"
+version = "0.1.0"
+description = "Sign language recognition training and export pipeline for the Sayva KMP app"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "Sayva" }]
+
+dependencies = [
+    "torch>=2.4.0",
+    "mediapipe>=0.10.14",
+    "numpy>=1.26,<3.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "scikit-learn>=1.4",
+    "opencv-python>=4.9",
+]
+
+[project.optional-dependencies]
+export = [
+    "onnx>=1.16",
+    "onnxruntime>=1.18",
+    # ai-edge-torch (Google's PyTorch → TFLite bridge) has no Windows wheel
+    # for its `litert-converter` transitive dep. Restrict to Linux/macOS —
+    # run TFLite export there (or in CI). Windows developers can still train
+    # + export ONNX and hand the .onnx to a Linux/macOS runner.
+    "ai-edge-torch>=0.2.0; python_version<'3.13' and sys_platform != 'win32'",
+    # CoreML export requires macOS runtime anyway; keep the guard so
+    # Linux/Windows dev machines don't try to install it either.
+    "coremltools>=8.0; sys_platform == 'darwin'",
+    "onnx2tf>=1.22",
+    "tensorflow>=2.16",
+    "tf-keras>=2.21.0",
+    "onnx-graphsurgeon>=0.6.1",
+    "sng4onnx>=2.0.1",
+    "ai-edge-litert>=2.1.5",
+    "coremltools>=8.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-pyyaml>=6.0",
+    "ipykernel>=6.29",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sayva_ml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # ruff format handles line length
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B", "N"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["mediapipe.*", "cv2.*", "coremltools.*", "ai_edge_torch.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--strict-config", "-ra"]

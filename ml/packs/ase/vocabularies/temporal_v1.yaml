@@ -1,0 +1,19 @@
+# Sayva temporal-sign vocabulary v1 — ASL 5-sign toy
+#
+# Pack: ase (American Sign Language)
+# Model: temporal LSTM (30 × 84-float sequence input)
+#
+# Phase-1 pipeline-validation vocabulary. Phase 2 replaces with the locked
+# 50-sign vocabulary once accuracy work lands.
+#
+# Schema — see fingerspelling.yaml for the shared documentation. Every pack
+# in every language uses the same shape.
+
+version: 1
+
+signs:
+  - { id: HELLO, tags: [greeting, one-hand] }
+  - { id: THANK_YOU, tags: [gratitude, one-hand] }
+  - { id: PLEASE, tags: [courtesy, one-hand] }
+  - { id: SORRY, tags: [apology, one-hand] }
+  - { id: "YES", tags: [response, one-hand] }  # quoted — YES is a YAML 1.1 truthy word

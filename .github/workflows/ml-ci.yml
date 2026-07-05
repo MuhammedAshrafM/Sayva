@@ -1,0 +1,97 @@
+name: ml-ci
+
+# Path-filtered so app-only PRs don't spin up a Python env.
+# See docs/phase-1-tickets.md P1-08.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ml/**"
+      - ".github/workflows/ml-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "ml/**"
+      - ".github/workflows/ml-ci.yml"
+
+concurrency:
+  group: ml-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ml
+
+jobs:
+  quality:
+    name: Lint · type-check · test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "ml/uv.lock"
+
+      - name: Set up Python
+        run: uv python install
+        env:
+          UV_PROJECT_ENVIRONMENT: .venv
+
+      - name: Install dependencies (dev + export)
+        # Export extras include torch, onnx, tensorflow, onnx2tf, coremltools —
+        # needed for training/export scripts and for mypy to type-check them.
+        # Linux runners install all four cleanly (unlike Windows where
+        # ai-edge-torch and coremltools skip via platform markers).
+        run: uv sync --frozen --group dev --extra export
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy type-check
+        run: uv run mypy src/ tests/
+
+      - name: Pytest
+        run: uv run pytest --cov=src/sayva_ml --cov-report=term-missing
+
+      - name: Vocabulary codegen up-to-date
+        # Ensures nobody edits a `configs/*.yaml` without regenerating the
+        # committed Vocabulary.kt on the Kotlin side.
+        run: uv run python scripts/generate_vocab.py --check
+
+      - name: Landmark fixture up-to-date
+        # Same for the shared parity fixture: if the algorithm changes,
+        # regenerate the JSON so Kotlin and Python stay in lockstep.
+        # We compare the freshly-generated file against what's committed.
+        run: |
+          uv run python scripts/generate_landmark_fixture.py
+          if ! git diff --exit-code tests/fixtures/landmark_parity.json \
+                                     ../shared/src/androidHostTest/resources/landmark_parity.json; then
+            echo "::error::Landmark parity fixture is stale — regenerate it."
+            exit 1
+          fi
+
+      - name: Synthetic training smoke — fingerspelling MLP
+        # Full train → export ONNX. Catches integration regressions across
+        # data → model → training → export. 100 epochs on 24 classes at
+        # 200 samples/class trains in <1 min on CI.
+        run: |
+          uv run python -m sayva_ml.training.train_fingerspelling \
+              --data synthetic --epochs 100 --patience 15 \
+              --version fingerspelling_ci_smoke
+          test -f models/exported/fingerspelling_ci_smoke/model.pt
+          test -f models/exported/fingerspelling_ci_smoke/model.onnx
+
+      - name: Synthetic training smoke — temporal LSTM
+        run: |
+          uv run python -m sayva_ml.training.train_temporal \
+              --data synthetic --epochs 40 --patience 10 \
+              --version sign_toy_ci_smoke
+          test -f models/exported/sign_toy_ci_smoke/model.pt
+          test -f models/exported/sign_toy_ci_smoke/model.onnx

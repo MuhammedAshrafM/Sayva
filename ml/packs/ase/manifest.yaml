@@ -1,0 +1,107 @@
+# Sayva Language Pack manifest — American Sign Language (ase)
+#
+# This file is the single source of truth for everything the app needs to
+# recognize signs in ASL and translate them to a supported output language.
+# The distributed form (`manifest.json`) is generated from this file by
+# `ml/scripts/generate_pack.py` — that's the file the mobile app parses.
+#
+# Every Language Pack ships this same manifest schema. Changing the schema
+# means changing every pack. Adding a new canonical output language means
+# adding it to every pack (with a stub labels file if translations aren't
+# ready yet).
+
+schemaVersion: 1
+
+# Identity
+recognitionCode: ase                     # ISO 639-3 sign-language code
+displayName:
+  en: American Sign Language
+  ar: لغة الإشارة الأمريكية              # stub — pending native review
+version: 0.1.0                            # SemVer for the pack as a whole
+minAppVersion: 1                          # bumps if the pack requires new app APIs
+bundled: true                             # ships in the APK (MVP pack)
+
+# Models
+#
+# Every model manifests its four adapter IDs — runtime, preprocessing,
+# postprocessing, inference strategy. The app looks each ID up in the
+# corresponding registry; unknown IDs fail with a "requires app v N.M+"
+# error rather than triggering fallback behavior.
+#
+# `architecture` is purely descriptive metadata (used in analytics + logs).
+# The runtime picks concrete behavior from the adapter IDs.
+models:
+  - id: fingerspelling
+    # `role` is a stable *capability* identifier the app looks up when the
+    # user picks a recognition mode. Same registry pattern as the adapter
+    # IDs — a Pack advertises which modes it can serve; the UI never
+    # hardcodes model IDs (which vary per-pack) and instead binds by role.
+    role: fingerspelling
+    architecture: mlp
+    file: models/exported/fingerspelling_v0.1.0/model.tflite
+    runtime:
+      type: tflite
+    inferenceStrategy: single_frame
+    input:
+      shape: [1, 42]                      # single hand, 21 landmarks × (x, y)
+      preprocessing: single_hand_kazuhito_v1
+      # Explicit hand count. Every model declares this so the pipeline knows
+      # how to configure the HandDetector without inferring from preprocessing
+      # names. Value MUST match what the declared preprocessor expects.
+      maxHands: 1
+    output:
+      shape: [1, 24]
+      postprocessing: argmax_confidence_v1
+    # Per-model confidence buckets. Different architectures produce differently
+    # calibrated scores — the MLP is decisive, the LSTM is smoother — and each
+    # Pack tunes them empirically. See docs/AI_PIPELINE.md#confidence-handling.
+    confidenceThresholds:
+      show: 0.90                          # ≥ 0.90 → show unstyled
+      caution: 0.60                       # 0.60–0.89 → show with caution styling
+      # below caution → route to low-confidence flow
+    vocabularyFile: vocabularies/fingerspelling.yaml
+
+  - id: temporal_v1
+    role: sign_recognition
+    architecture: lstm_unrolled
+    file: models/exported/temporal_v1.0.0/model.tflite
+    runtime:
+      type: tflite
+    inferenceStrategy: single_frame
+    input:
+      shape: [1, 30, 84]                  # 30 frames × (two hands × 21 × (x, y))
+      preprocessing: two_hand_sequence_v1
+      sequenceLength: 30
+      maxHands: 2
+    output:
+      shape: [1, 5]
+      postprocessing: argmax_confidence_v1
+    confidenceThresholds:
+      show: 0.80                          # LSTM's softmax is smoother
+      caution: 0.50
+    vocabularyFile: vocabularies/temporal_v1.yaml
+
+# Output translation
+supportedOutputs: [en, ar]                # every pack ships a file per canonical output
+outputLanguageStatus:
+  en: complete                            # all vocab entries have reviewed translations
+  ar: stub                                # file exists; entries are placeholders
+defaultOutputLanguage: en
+outputLabelsDir: labels/                  # one JSON per outputs entry
+
+ttsLocaleByOutput:
+  en: en-US
+  ar: ar-EG
+
+# Recognition & rendering behavior
+postProcessing:
+  spellOutBlankTimeoutMs: 700             # ms of "no hand" before flushing fingerspelling buffer
+  sentenceAssemblyRuleset: standard_v1
+  capitalization: sentence_case
+
+# Integrity + distribution — generated at pack build time by
+# `scripts/generate_pack.py`. Do not hand-edit.
+# contentChecksum: sha256:...
+# sizeBytes:
+#   compressed: ...
+#   uncompressed: ...

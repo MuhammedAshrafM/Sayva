@@ -1,0 +1,20 @@
+{
+  "_meta": {
+    "outputCode": "en",
+    "packCode": "ase",
+    "note": "Complete English labels for every sign in every vocabulary of the ase pack. See ../vocabularies/*.yaml for the authoritative sign ID lists."
+  },
+  "fingerspelling": {
+    "A": "A", "B": "B", "C": "C", "D": "D", "E": "E", "F": "F", "G": "G",
+    "H": "H", "I": "I", "K": "K", "L": "L", "M": "M", "N": "N", "O": "O",
+    "P": "P", "Q": "Q", "R": "R", "S": "S", "T": "T", "U": "U", "V": "V",
+    "W": "W", "X": "X", "Y": "Y"
+  },
+  "temporal_v1": {
+    "HELLO": "Hello",
+    "THANK_YOU": "Thank you",
+    "PLEASE": "Please",
+    "SORRY": "Sorry",
+    "YES": "Yes"
+  }
+}

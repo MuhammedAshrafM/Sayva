@@ -1,0 +1,59 @@
+-- Translation history entries. Populated when the user completes a translation
+-- (LiveCamera result, or a saved conversation). Read by HistoryScreen /
+-- HistoryDetailScreen.
+--
+-- Column notes:
+--   day, time         Preformatted display strings. We store them as-is (not as a
+--                     timestamp) because the "TODAY" / "YESTERDAY" grouping in the UI
+--                     is derived at write-time from the user's timezone at that moment.
+--   createdAt         Unix epoch millis. Used ONLY for ordering — display uses `day`+`time`.
+--   confidence        0-100. Nullable for conversation entries (no single score).
+--   isConversation    True if this row aggregates a multi-turn conversation
+--                     (messageCount, duration populated). False for single-sign entries.
+
+CREATE TABLE HistoryItemEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    day TEXT NOT NULL,
+    time TEXT NOT NULL,
+    title TEXT NOT NULL,
+    confidence INTEGER,
+    language TEXT,
+    isFavorite INTEGER NOT NULL DEFAULT 0,
+    isConversation INTEGER NOT NULL DEFAULT 0,
+    messageCount INTEGER,
+    duration TEXT,
+    isLowConfidence INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL
+);
+
+CREATE INDEX historyItem_createdAt_idx ON HistoryItemEntity(createdAt DESC);
+
+selectAll:
+SELECT * FROM HistoryItemEntity ORDER BY createdAt DESC;
+
+selectById:
+SELECT * FROM HistoryItemEntity WHERE id = ?;
+
+selectFavorites:
+SELECT * FROM HistoryItemEntity WHERE isFavorite = 1 ORDER BY createdAt DESC;
+
+selectByLanguage:
+SELECT * FROM HistoryItemEntity WHERE language = ? ORDER BY createdAt DESC;
+
+insert:
+INSERT OR REPLACE INTO HistoryItemEntity(
+    id, day, time, title, confidence, language,
+    isFavorite, isConversation, messageCount, duration, isLowConfidence, createdAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateFavorite:
+UPDATE HistoryItemEntity SET isFavorite = ? WHERE id = ?;
+
+delete:
+DELETE FROM HistoryItemEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM HistoryItemEntity;
+
+count:
+SELECT COUNT(*) FROM HistoryItemEntity;

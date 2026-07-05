@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "outputCode": "ar",
+    "packCode": "ase",
+    "status": "stub",
+    "note": "Stub Arabic labels for the ASL pack. Values are gloss placeholders until reviewed native translations arrive. Uniform contract requires this file to exist; entries with `null` render the gloss ID plus a 'not translated' annotation in the UI. Contributions welcome via community translation review workflow."
+  },
+  "fingerspelling": {
+    "A": null, "B": null, "C": null, "D": null, "E": null, "F": null, "G": null,
+    "H": null, "I": null, "K": null, "L": null, "M": null, "N": null, "O": null,
+    "P": null, "Q": null, "R": null, "S": null, "T": null, "U": null, "V": null,
+    "W": null, "X": null, "Y": null
+  },
+  "temporal_v1": {
+    "HELLO": null,
+    "THANK_YOU": null,
+    "PLEASE": null,
+    "SORRY": null,
+    "YES": null
+  }
+}

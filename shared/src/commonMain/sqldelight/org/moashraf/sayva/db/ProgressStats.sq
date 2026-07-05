@@ -1,0 +1,40 @@
+-- Learning progress aggregates. Read by ProgressScreen, LearnCategoriesScreen,
+-- and the daily challenge card on HomeScreen. Single-row table by design —
+-- the CHECK (id = 1) constraint enforces that at the SQL level so buggy code
+-- can't insert a second row.
+--
+-- The weekly bar chart data (weeklyHeights / weeklyLabels) lives in code as a
+-- 7-day sliding window computed from lastSessionAt + activity events, not stored
+-- here. Keep this table narrow.
+
+CREATE TABLE ProgressStatsEntity (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    streakDays INTEGER NOT NULL DEFAULT 0,
+    personalBestStreak INTEGER NOT NULL DEFAULT 0,
+    totalXp INTEGER NOT NULL DEFAULT 0,
+    signsLearned INTEGER NOT NULL DEFAULT 0,
+    lessonsCompleted INTEGER NOT NULL DEFAULT 0,
+    badgesEarned INTEGER NOT NULL DEFAULT 0,
+    lastSessionAt INTEGER
+);
+
+selectStats:
+SELECT * FROM ProgressStatsEntity WHERE id = 1;
+
+upsert:
+INSERT OR REPLACE INTO ProgressStatsEntity(
+    id, streakDays, personalBestStreak, totalXp,
+    signsLearned, lessonsCompleted, badgesEarned, lastSessionAt
+) VALUES (1, ?, ?, ?, ?, ?, ?, ?);
+
+incrementXp:
+UPDATE ProgressStatsEntity SET totalXp = totalXp + ? WHERE id = 1;
+
+incrementSignsLearned:
+UPDATE ProgressStatsEntity SET signsLearned = signsLearned + 1 WHERE id = 1;
+
+incrementLessonsCompleted:
+UPDATE ProgressStatsEntity SET lessonsCompleted = lessonsCompleted + 1 WHERE id = 1;
+
+reset:
+DELETE FROM ProgressStatsEntity;

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Sayva uses your camera to recognize sign language gestures and translate them in real time. All processing happens on-device — no video is uploaded.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sayva uses your microphone to transcribe spoken words during two-way conversations. Audio is processed on-device.</string>
+</dict>
+</plist>

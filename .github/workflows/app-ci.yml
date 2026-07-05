@@ -1,0 +1,112 @@
+name: app-ci
+
+# Path-filtered so ML-only PRs don't burn CI minutes on a full Gradle build.
+# See docs/phase-1-tickets.md P1-08.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "androidApp/**"
+      - "iosApp/**"
+      - "shared/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/app-ci.yml"
+      # ml/configs/*.yaml drives the generated Vocabulary.kt — vocabulary
+      # edits must trip app-ci so `verifyVocabulary` catches stale codegen.
+      - "ml/configs/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "androidApp/**"
+      - "iosApp/**"
+      - "shared/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/app-ci.yml"
+      - "ml/configs/**"
+
+concurrency:
+  group: app-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & test (Android host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install uv (for vocabulary verify)
+        # verifyVocabulary shells out to `uv run python scripts/generate_vocab.py`
+        # so we need uv on PATH before the Gradle step.
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "ml/uv.lock"
+
+      - name: Sync ml/ deps for vocabulary verify
+        working-directory: ml
+        run: uv sync --frozen --group dev
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+
+      - name: Verify vocabulary codegen is up to date
+        run: ./gradlew :shared:verifyVocabulary --no-daemon --stacktrace
+
+      - name: Assemble shared module
+        run: ./gradlew :shared:assemble --no-daemon --stacktrace
+
+      - name: Run shared tests (Android host)
+        run: ./gradlew :shared:testAndroidHostTest --no-daemon --stacktrace
+
+      - name: Assemble debug APK
+        run: ./gradlew :androidApp:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: androidApp-debug
+          path: androidApp/build/outputs/apk/debug/*.apk
+          retention-days: 7
+
+  ios-build:
+    name: Build iOS framework
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build iOS simulator framework
+        run: ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64 --no-daemon --stacktrace
+
+      - name: Run shared iOS tests
+        run: ./gradlew :shared:iosSimulatorArm64Test --no-daemon --stacktrace

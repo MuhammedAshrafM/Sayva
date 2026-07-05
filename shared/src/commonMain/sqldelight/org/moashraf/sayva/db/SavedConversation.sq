@@ -1,0 +1,59 @@
+-- Saved two-way conversation transcripts, created when the user taps "Stop & save"
+-- on ConversationScreen. Read by SavedConversationsScreen.
+--
+-- Column notes:
+--   preview            First line of the transcript, for the list-view preview.
+--   partnerColorHex    ARGB hex string (e.g. "#FF5B5FEF") for the avatar background.
+--   messageCount       Number of transcript entries — used in the metadata line.
+--   highlighted        True when this conversation should render with the accented
+--                      border on the list. Set by the "Pin" action.
+--
+-- Full transcript content is NOT stored in this table. It belongs to a
+-- ConversationMessage table (deferred — will land when Conversation persistence
+-- is fully wired in a later ticket).
+
+CREATE TABLE SavedConversationEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    timeLabel TEXT NOT NULL,
+    preview TEXT NOT NULL,
+    partnerInitial TEXT NOT NULL,
+    partnerColorHex TEXT NOT NULL,
+    messageCount INTEGER,
+    category TEXT,
+    isFavorite INTEGER NOT NULL DEFAULT 0,
+    highlighted INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL
+);
+
+CREATE INDEX savedConversation_createdAt_idx ON SavedConversationEntity(createdAt DESC);
+
+selectAll:
+SELECT * FROM SavedConversationEntity ORDER BY createdAt DESC;
+
+selectById:
+SELECT * FROM SavedConversationEntity WHERE id = ?;
+
+selectFavorites:
+SELECT * FROM SavedConversationEntity WHERE isFavorite = 1 ORDER BY createdAt DESC;
+
+insert:
+INSERT OR REPLACE INTO SavedConversationEntity(
+    id, title, timeLabel, preview, partnerInitial, partnerColorHex,
+    messageCount, category, isFavorite, highlighted, createdAt
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateFavorite:
+UPDATE SavedConversationEntity SET isFavorite = ? WHERE id = ?;
+
+updateHighlighted:
+UPDATE SavedConversationEntity SET highlighted = ? WHERE id = ?;
+
+delete:
+DELETE FROM SavedConversationEntity WHERE id = ?;
+
+deleteAll:
+DELETE FROM SavedConversationEntity;
+
+count:
+SELECT COUNT(*) FROM SavedConversationEntity;

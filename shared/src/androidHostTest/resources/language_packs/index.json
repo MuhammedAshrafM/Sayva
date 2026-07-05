@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "bundled": [
+    {
+      "recognitionCode": "ase",
+      "displayName": {
+        "en": "American Sign Language",
+        "ar": "لغة الإشارة الأمريكية"
+      },
+      "version": "0.1.0",
+      "minAppVersion": 1
+    }
+  ]
+}

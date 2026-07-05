@@ -1,0 +1,46 @@
+-- Quick-access phrases the user has saved for TTS playback. Emergency phrases
+-- (isEmergency = 1) render with distinct styling on FavoritesScreen.
+--
+-- Column notes:
+--   gradientColorsJson  JSON array of ARGB hex strings, e.g. ["#FF5B5FEF","#FF8A8EF5"].
+--                       The Compose Color values live in the UI layer; DB stores
+--                       serialized form to keep the column list flat and portable.
+--   sortOrder           User-controlled display order. Lower = higher on screen.
+
+CREATE TABLE FavoritePhraseEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    category TEXT NOT NULL,
+    text TEXT NOT NULL,
+    gradientColorsJson TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    isEmergency INTEGER NOT NULL DEFAULT 0,
+    sortOrder INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX favoritePhrase_category_idx ON FavoritePhraseEntity(category);
+
+selectAll:
+SELECT * FROM FavoritePhraseEntity ORDER BY sortOrder ASC;
+
+selectByCategory:
+SELECT * FROM FavoritePhraseEntity WHERE category = ? ORDER BY sortOrder ASC;
+
+selectEmergency:
+SELECT * FROM FavoritePhraseEntity WHERE isEmergency = 1 ORDER BY sortOrder ASC;
+
+selectById:
+SELECT * FROM FavoritePhraseEntity WHERE id = ?;
+
+insert:
+INSERT OR REPLACE INTO FavoritePhraseEntity(
+    id, category, text, gradientColorsJson, icon, isEmergency, sortOrder
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updateSortOrder:
+UPDATE FavoritePhraseEntity SET sortOrder = ? WHERE id = ?;
+
+delete:
+DELETE FROM FavoritePhraseEntity WHERE id = ?;
+
+count:
+SELECT COUNT(*) FROM FavoritePhraseEntity;

@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://api.github.com/repos/google/material-design-icons/contents/symbols/web/sign_language\")",
+      "Bash(curl -sv \"https://api.github.com\")",
+      "Bash(curl -s --ssl-no-revoke \"https://api.github.com/repos/google/material-design-icons/contents/symbols/web/sign_language\")",
+      "Bash(curl -s --ssl-no-revoke \"https://api.github.com/repos/google/material-design-icons/contents/symbols/web/sign_language/materialsymbolsrounded\")",
+      "Bash(curl -s --ssl-no-revoke \"https://raw.githubusercontent.com/google/material-design-icons/master/symbols/web/sign_language/materialsymbolsrounded/sign_language_24px.svg\" -o \"C:\\\\Users\\\\amirm\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Projects-KMP-Sayva\\\\c84ba112-69f1-4931-acf2-dc664d318205\\\\scratchpad\\\\sign_language_24px.svg\")",
+      "Bash(uv sync *)",
+      "PowerShell(Get-Command uv -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command python -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command pip -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command winget -ErrorAction SilentlyContinue)",
+      "PowerShell(powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\")"
+    ]
+  }
+}

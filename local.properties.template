@@ -1,0 +1,28 @@
+# =============================================================================
+# local.properties — LOCAL SECRETS (gitignored, per-developer)
+# =============================================================================
+#
+# Copy this file to `local.properties` (same directory) and fill in the values
+# from your Supabase project console + preferred backend flavor.
+#
+# `local.properties` is gitignored — never commit it. If a value looks like a
+# real key on your machine, it's YOUR key; other clones of this repo will need
+# their own.
+
+# Where MainActivity / MainViewController should route auth calls at runtime.
+# Values: firebase | supabase
+sayva.backend=firebase
+
+# Supabase project URL — https://<project-ref>.supabase.co
+# Find it: Supabase Console → Project Settings → Data API → Project URL
+sayva.supabase.url=https://rqmyvlumgjwksyijmdeh.supabase.co
+
+# Supabase anon (public) API key — a very long JWT starting with "eyJ..."
+# Find it: Supabase Console → Project Settings → Data API → Project API Keys → anon public
+# This key is designed to be embedded in client apps (protected server-side by
+# Row Level Security policies) — but treat it as sensitive during dev so it
+# doesn't accidentally end up in tracked files.
+sayva.supabase.anonKey=
+
+# ----- Android SDK path (auto-populated by Android Studio; do not remove) -----
+# sdk.dir=C:\\Users\\your-name\\AppData\\Local\\Android\\Sdk

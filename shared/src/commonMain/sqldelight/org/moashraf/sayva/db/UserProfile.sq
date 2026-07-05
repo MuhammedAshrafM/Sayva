@@ -1,0 +1,32 @@
+-- Cached user profile for the currently signed-in account. Single-row.
+--
+-- Refreshed from the AuthGateway.currentUser flow. Cleared on sign-out
+-- so that no residual profile leaks across accounts on shared devices.
+--
+-- Auth tokens do NOT live here — they belong to SecureStorage (encrypted).
+-- This table is convenience metadata for the UI to render without a network hit.
+
+CREATE TABLE UserProfileEntity (
+    id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    userId TEXT NOT NULL,
+    email TEXT,
+    displayName TEXT,
+    isAnonymous INTEGER NOT NULL DEFAULT 0,
+    isEmailVerified INTEGER NOT NULL DEFAULT 0,
+    isPlusSubscriber INTEGER NOT NULL DEFAULT 0,
+    createdAt INTEGER NOT NULL
+);
+
+selectProfile:
+SELECT * FROM UserProfileEntity WHERE id = 1;
+
+upsert:
+INSERT OR REPLACE INTO UserProfileEntity(
+    id, userId, email, displayName, isAnonymous, isEmailVerified, isPlusSubscriber, createdAt
+) VALUES (1, ?, ?, ?, ?, ?, ?, ?);
+
+updatePlusStatus:
+UPDATE UserProfileEntity SET isPlusSubscriber = ? WHERE id = 1;
+
+clear:
+DELETE FROM UserProfileEntity;

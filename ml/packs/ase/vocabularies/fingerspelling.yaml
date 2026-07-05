@@ -1,0 +1,45 @@
+# Sayva fingerspelling vocabulary — ASL single-frame alphabet
+#
+# Pack: ase (American Sign Language)
+# Model: fingerspelling MLP (single frame, 42-float input)
+#
+# We exclude J and Z because they require motion — meaningless to a single-
+# frame classifier. Callers wanting to fingerspell them use the temporal
+# recognizer path.
+#
+# Schema (pack-neutral — every pack's vocabulary uses this shape):
+#   version:   Bump when signs are added, removed, or reordered.
+#              Index in `signs` == model output class index.
+#              Never reorder without bumping version — silently invalidates
+#              trained checkpoints.
+#   signs:     Ordered list of `{ id, tags }`. Human-readable labels for
+#              each id live in `../labels/{outputCode}.json` — one per
+#              output language (en, ar, ...).
+
+version: 1
+
+signs:
+  - { id: A, tags: [] }
+  - { id: B, tags: [] }
+  - { id: C, tags: [] }
+  - { id: D, tags: [] }
+  - { id: E, tags: [] }
+  - { id: F, tags: [] }
+  - { id: G, tags: [] }
+  - { id: H, tags: [] }
+  - { id: I, tags: [] }
+  - { id: K, tags: [] }
+  - { id: L, tags: [] }
+  - { id: M, tags: [] }
+  - { id: N, tags: [] }
+  - { id: O, tags: [] }
+  - { id: P, tags: [] }
+  - { id: Q, tags: [] }
+  - { id: R, tags: [] }
+  - { id: S, tags: [] }
+  - { id: T, tags: [] }
+  - { id: U, tags: [] }
+  - { id: V, tags: [] }
+  - { id: W, tags: [] }
+  - { id: X, tags: [] }
+  - { id: Y, tags: [] }

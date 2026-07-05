@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "recognitionCode": "ase",
+  "displayName": {
+    "en": "American Sign Language",
+    "ar": "لغة الإشارة الأمريكية"
+  },
+  "version": "0.1.0",
+  "minAppVersion": 1,
+  "bundled": true,
+  "models": [
+    {
+      "id": "fingerspelling",
+      "role": "fingerspelling",
+      "architecture": "mlp",
+      "modelFile": "models/fingerspelling.tflite",
+      "runtime": {
+        "type": "tflite"
+      },
+      "inferenceStrategy": "single_frame",
+      "input": {
+        "shape": [
+          1,
+          42
+        ],
+        "preprocessing": "single_hand_kazuhito_v1",
+        "maxHands": 1
+      },
+      "output": {
+        "shape": [
+          1,
+          24
+        ],
+        "postprocessing": "argmax_confidence_v1"
+      },
+      "confidenceThresholds": {
+        "show": 0.9,
+        "caution": 0.6
+      },
+      "vocabulary": {
+        "version": 1,
+        "signs": [
+          {
+            "id": "A",
+            "tags": []
+          },
+          {
+            "id": "B",
+            "tags": []
+          },
+          {
+            "id": "C",
+            "tags": []
+          },
+          {
+            "id": "D",
+            "tags": []
+          },
+          {
+            "id": "E",
+            "tags": []
+          },
+          {
+            "id": "F",
+            "tags": []
+          },
+          {
+            "id": "G",
+            "tags": []
+          },
+          {
+            "id": "H",
+            "tags": []
+          },
+          {
+            "id": "I",
+            "tags": []
+          },
+          {
+            "id": "K",
+            "tags": []
+          },
+          {
+            "id": "L",
+            "tags": []
+          },
+          {
+            "id": "M",
+            "tags": []
+          },
+          {
+            "id": "N",
+            "tags": []
+          },
+          {
+            "id": "O",
+            "tags": []
+          },
+          {
+            "id": "P",
+            "tags": []
+          },
+          {
+            "id": "Q",
+            "tags": []
+          },
+          {
+            "id": "R",
+            "tags": []
+          },
+          {
+            "id": "S",
+            "tags": []
+          },
+          {
+            "id": "T",
+            "tags": []
+          },
+          {
+            "id": "U",
+            "tags": []
+          },
+          {
+            "id": "V",
+            "tags": []
+          },
+          {
+            "id": "W",
+            "tags": []
+          },
+          {
+            "id": "X",
+            "tags": []
+          },
+          {
+            "id": "Y",
+            "tags": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "temporal_v1",
+      "role": "sign_recognition",
+      "architecture": "lstm_unrolled",
+      "modelFile": "models/temporal_v1.tflite",
+      "runtime": {
+        "type": "tflite"
+      },
+      "inferenceStrategy": "single_frame",
+      "input": {
+        "shape": [
+          1,
+          30,
+          84
+        ],
+        "preprocessing": "two_hand_sequence_v1",
+        "maxHands": 2,
+        "sequenceLength": 30
+      },
+      "output": {
+        "shape": [
+          1,
+          5
+        ],
+        "postprocessing": "argmax_confidence_v1"
+      },
+      "confidenceThresholds": {
+        "show": 0.8,
+        "caution": 0.5
+      },
+      "vocabulary": {
+        "version": 1,
+        "signs": [
+          {
+            "id": "HELLO",
+            "tags": [
+              "greeting",
+              "one-hand"
+            ]
+          },
+          {
+            "id": "THANK_YOU",
+            "tags": [
+              "gratitude",
+              "one-hand"
+            ]
+          },
+          {
+            "id": "PLEASE",
+            "tags": [
+              "courtesy",
+              "one-hand"
+            ]
+          },
+          {
+            "id": "SORRY",
+            "tags": [
+              "apology",
+              "one-hand"
+            ]
+          },
+          {
+            "id": "YES",
+            "tags": [
+              "response",
+              "one-hand"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "supportedOutputs": [
+    "en",
+    "ar"
+  ],
+  "outputLanguageStatus": {
+    "en": "complete",
+    "ar": "stub"
+  },
+  "defaultOutputLanguage": "en",
+  "outputLabels": {
+    "en": {
+      "fingerspelling": {
+        "A": "A",
+        "B": "B",
+        "C": "C",
+        "D": "D",
+        "E": "E",
+        "F": "F",
+        "G": "G",
+        "H": "H",
+        "I": "I",
+        "K": "K",
+        "L": "L",
+        "M": "M",
+        "N": "N",
+        "O": "O",
+        "P": "P",
+        "Q": "Q",
+        "R": "R",
+        "S": "S",
+        "T": "T",
+        "U": "U",
+        "V": "V",
+        "W": "W",
+        "X": "X",
+        "Y": "Y"
+      },
+      "temporal_v1": {
+        "HELLO": "Hello",
+        "THANK_YOU": "Thank you",
+        "PLEASE": "Please",
+        "SORRY": "Sorry",
+        "YES": "Yes"
+      }
+    },
+    "ar": {
+      "fingerspelling": {
+        "A": null,
+        "B": null,
+        "C": null,
+        "D": null,
+        "E": null,
+        "F": null,
+        "G": null,
+        "H": null,
+        "I": null,
+        "K": null,
+        "L": null,
+        "M": null,
+        "N": null,
+        "O": null,
+        "P": null,
+        "Q": null,
+        "R": null,
+        "S": null,
+        "T": null,
+        "U": null,
+        "V": null,
+        "W": null,
+        "X": null,
+        "Y": null
+      },
+      "temporal_v1": {
+        "HELLO": null,
+        "THANK_YOU": null,
+        "PLEASE": null,
+        "SORRY": null,
+        "YES": null
+      }
+    }
+  },
+  "ttsLocaleByOutput": {
+    "en": "en-US",
+    "ar": "ar-EG"
+  },
+  "postProcessing": {
+    "spellOutBlankTimeoutMs": 700,
+    "sentenceAssemblyRuleset": "standard_v1",
+    "capitalization": "sentence_case"
+  }
+}

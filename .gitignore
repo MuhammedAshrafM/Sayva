@@ -1,0 +1,69 @@
+*.iml
+.kotlin
+.gradle
+**/build/
+xcuserdata
+!src/**/build/
+local.properties
+.idea
+.DS_Store
+captures
+.externalNativeBuild
+.cxx
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
+node_modules/
+
+# --- Firebase / secrets ---
+# API keys and project config — do not commit until secrets management is set up.
+# Team members regenerate their own from Firebase Console.
+androidApp/google-services.json
+iosApp/iosApp/GoogleService-Info.plist
+# BuildKonfig / Supabase secrets (populate locally, keep template committed)
+gradle.properties.secrets
+secrets.properties
+
+# --- ml/ Python subproject ---
+ml/.venv/
+ml/**/__pycache__/
+ml/**/*.pyc
+ml/**/.mypy_cache/
+ml/**/.pytest_cache/
+ml/**/.ruff_cache/
+ml/**/.ipynb_checkpoints/
+ml/datasets/
+ml/models/checkpoints/
+ml/models/cache/
+# Per-Pack training staging area (torch checkpoints, ONNX, dataset caches).
+# The distributable pack manifest + committed model files under
+# shared/src/commonMain/composeResources/files/language_packs/ ARE tracked
+# so a fresh clone builds/installs without running training first.
+ml/packs/*/models/exported/
+ml/packs/*/data/cache/
+ml/packs/*/data/downloads/
+# Legacy staging path — keep ignored for anyone with a stale local layout.
+ml/models/exported/*
+!ml/models/exported/.gitkeep
+
+# --- MediaPipe binary assets ---
+# Downloaded per shared/src/androidMain/assets/mediapipe/README.md; too large
+# (~7 MB) and rotated by Google to check in. Every developer curls once.
+shared/src/androidMain/assets/mediapipe/*.task
+
+# --- Claude Code local (per-developer) settings ---
+# Team-shared config lives in .claude/settings.json (committed).
+# Personal permission grants live in the .local.json overlay — do not commit.
+.claude/settings.local.json
+.claude/**/*.local.json
+
+# --- Random per-developer files ---
+*.log
+*.tmp
+scratch/
+.env
+.env.*
+!.env.example
