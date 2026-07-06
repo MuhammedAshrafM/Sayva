@@ -82,8 +82,32 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _model_integrity(manifest: LanguagePackManifest, model: ModelSpec) -> dict:
+    """SHA-256 + file size for one model, keyed on the SOURCE bytes.
+
+    We compute against `packs/<code>/<model.file>` rather than the copied
+    distributable path so both stay bit-identical when a subsequent
+    generator run inspects them. The copy step (below) uses the same
+    checksum to decide idempotence.
+    """
+    src = manifest.pack_root / model.file
+    return {
+        "sha256": _sha256(src),
+        "sizeBytes": src.stat().st_size,
+    }
+
+
 def _build_manifest_json(manifest: LanguagePackManifest) -> dict:
-    """Distributable manifest — everything the mobile app needs in one JSON."""
+    """Distributable manifest — everything the mobile app needs in one JSON.
+
+    Each model entry carries an `integrity` block with the SHA-256 of the
+    exact bytes the app will read at runtime plus its size on disk. Both
+    fields are populated NOW so the shape OTA verification will consume is
+    already established — retrofitting integrity metadata across shipped
+    packs later is expensive; populating today costs nothing (see
+    PACKS_WORKFLOW.md, "SHA-256 integrity metadata"). Signing the pack
+    remains a Phase 3 concern; the hash is what signing will cover.
+    """
     return {
         "schemaVersion": manifest.schema_version,
         "recognitionCode": manifest.recognition_code,
@@ -128,6 +152,7 @@ def _build_manifest_json(manifest: LanguagePackManifest) -> dict:
                         {"id": s.id, "tags": list(s.tags)} for s in m.vocabulary.signs
                     ],
                 },
+                "integrity": _model_integrity(manifest, m),
             }
             for m in manifest.models
         ],

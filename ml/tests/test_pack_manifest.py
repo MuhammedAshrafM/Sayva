@@ -181,6 +181,52 @@ def _write_pack_with_version(tmp_path, version: str) -> None:
     manifest_path.write_text(new_text, encoding="utf-8")
 
 
+@pytest.mark.parametrize("pack", _all_packs(), ids=lambda p: p.recognition_code)
+def test_distributed_manifest_carries_valid_integrity_metadata(pack) -> None:
+    """Every distributed model entry must ship a SHA-256 + sizeBytes that
+    match the on-disk bytes exactly.
+
+    Guards against a regeneration bug that silently emits a stale hash
+    (e.g. computing before the copy step, or against a cached file). If
+    this drifts, OTA integrity verification would start rejecting valid
+    packs — better to catch it in the pack pipeline than in production.
+    """
+    import hashlib
+    import json
+
+    _COMPOSE_ROOT = _repo_root() / "shared" / "src" / "commonMain" / "composeResources" / "files" / "language_packs"
+    dist_manifest = _COMPOSE_ROOT / pack.recognition_code / "manifest.json"
+    if not dist_manifest.exists():
+        pytest.skip(f"Pack '{pack.recognition_code}' not distributed yet")
+
+    payload = json.loads(dist_manifest.read_text(encoding="utf-8"))
+    for entry in payload["models"]:
+        integrity = entry.get("integrity")
+        assert integrity, (
+            f"Pack '{pack.recognition_code}' model '{entry['id']}' missing "
+            f"integrity block. Run `uv run python scripts/generate_pack.py`."
+        )
+        expected_sha = integrity["sha256"]
+        expected_size = integrity["sizeBytes"]
+        assert isinstance(expected_sha, str) and len(expected_sha) == 64
+        assert isinstance(expected_size, int) and expected_size > 0
+
+        # Verify against the actual distributed file.
+        model_file = _COMPOSE_ROOT / pack.recognition_code / entry["modelFile"]
+        assert model_file.exists(), f"Missing distributed model file: {model_file}"
+        actual_bytes = model_file.read_bytes()
+        assert hashlib.sha256(actual_bytes).hexdigest() == expected_sha, (
+            f"Pack '{pack.recognition_code}' model '{entry['id']}' SHA "
+            f"mismatch. Re-run generate_pack.py."
+        )
+        assert len(actual_bytes) == expected_size
+
+
+def _repo_root():
+    from pathlib import Path
+    return Path(__file__).resolve().parents[2]
+
+
 def test_missing_labels_file_fails_manifest_load(tmp_path) -> None:
     """Uniform contract check: a pack without a canonical labels file
     doesn't load."""

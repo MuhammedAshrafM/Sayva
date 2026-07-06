@@ -137,6 +137,10 @@
             "tags": []
           }
         ]
+      },
+      "integrity": {
+        "sha256": "1ca3278913e9eaf0331811317710152ae09180bace749255fbd1a5a55fe90cb0",
+        "sizeBytes": 7064
       }
     },
     {
@@ -209,6 +213,10 @@
             ]
           }
         ]
+      },
+      "integrity": {
+        "sha256": "c6bd5b841da6ad930b108b2b468a4daa1ecbff9ada3df8732fe5ddb5d4e0232e",
+        "sizeBytes": 457500
       }
     }
   ],
