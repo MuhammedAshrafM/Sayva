@@ -36,6 +36,11 @@ ml/**/.pytest_cache/
 ml/**/.ruff_cache/
 ml/**/.ipynb_checkpoints/
 ml/datasets/
+# Some contributors extract raw datasets to a repo-root `datasets/`
+# rather than under `ml/`. Either location works for the training
+# scripts — pass the extracted path to `--dataset-dir`. Ignoring both
+# keeps large Kaggle downloads out of git under any layout.
+datasets/
 ml/models/checkpoints/
 ml/models/cache/
 # Per-Pack training staging area (torch checkpoints, ONNX, dataset caches).
