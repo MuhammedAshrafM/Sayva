@@ -13,11 +13,33 @@ from __future__ import annotations
 
 import enum
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# SemVer 2.0.0 core + optional prerelease / build metadata. Applied to every
+# pack's `version` field at parse time so a pack that ships `1.0` (missing
+# patch) or an empty string fails fast at build time instead of poisoning
+# analytics or breaking runtime version comparisons on-device.
+_SEMVER_RE = re.compile(
+    r"^"
+    r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"           # MAJOR.MINOR.PATCH
+    r"(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"     # -prerelease
+    r"(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?"
+    r"(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"        # +build
+    r"$"
+)
+
+
+def is_valid_semver(value: str) -> bool:
+    """Whether `value` matches SemVer 2.0.0.
+
+    Exported so tests + the version-bump-check script can share one regex.
+    """
+    return bool(_SEMVER_RE.match(value))
 
 from sayva_ml.vocabulary import Vocabulary, load_vocabulary
 
@@ -378,11 +400,19 @@ def load_manifest(pack_root: Path) -> LanguagePackManifest:
     )
 
     display_name = {str(k): str(v) for k, v in raw["displayName"].items()}
+    version_str = str(raw["version"]).strip()
+    if not version_str:
+        raise ValueError(f"{manifest_path}: 'version' must be a non-empty SemVer string")
+    if not is_valid_semver(version_str):
+        raise ValueError(
+            f"{manifest_path}: 'version' {version_str!r} is not valid SemVer 2.0.0. "
+            f"Expected MAJOR.MINOR.PATCH (e.g. '1.0.0' or '0.2.3-beta.1')."
+        )
     return LanguagePackManifest(
         schema_version=int(raw["schemaVersion"]),
         recognition_code=str(raw["recognitionCode"]),
         display_name=display_name,
-        version=str(raw["version"]),
+        version=version_str,
         min_app_version=int(raw["minAppVersion"]),
         bundled=bool(raw["bundled"]),
         models=models,

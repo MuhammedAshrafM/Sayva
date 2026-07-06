@@ -25,6 +25,23 @@ object PackManifestParser {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
+     * SemVer 2.0.0 core + optional prerelease/build metadata. Applied to the
+     * top-level `version` field so a distributed manifest hand-edited with
+     * an invalid version fails at load time on-device instead of silently
+     * poisoning analytics or breaking runtime comparisons. The Python-side
+     * `manifest.py` enforces the same regex at build time — this is
+     * defense in depth for the shipped JSON.
+     */
+    private val SEMVER_RE = Regex(
+        """^""" +
+            """(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)""" +
+            """(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)""" +
+            """(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?""" +
+            """(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?""" +
+            """$"""
+    )
+
+    /**
      * Parse a manifest JSON string.
      *
      * @throws PackManifestException with a message that names the pack and
@@ -38,7 +55,16 @@ object PackManifestParser {
         try {
             val schemaVersion = root.int("schemaVersion")
             val displayName = root.stringMap("displayName")
-            val version = root.string("version")
+            val version = root.string("version").trim()
+            if (version.isEmpty()) {
+                fail(packCode, "'version' must be a non-empty SemVer string")
+            }
+            if (!SEMVER_RE.matches(version)) {
+                fail(packCode,
+                    "'version' '$version' is not valid SemVer 2.0.0. Expected " +
+                        "MAJOR.MINOR.PATCH (e.g. '1.0.0' or '0.2.3-beta.1')."
+                )
+            }
             val minAppVersion = root.int("minAppVersion")
             val bundled = root["bundled"]?.jsonPrimitive?.contentOrNull?.equals("true", ignoreCase = true)
                 ?: (root["bundled"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false)

@@ -95,3 +95,35 @@ jobs:
               --version sign_toy_ci_smoke
           test -f models/exported/sign_toy_ci_smoke/model.pt
           test -f models/exported/sign_toy_ci_smoke/model.onnx
+
+  pack-version-bump:
+    # PR-only check per production audit P1 #8: if any file under
+    # `ml/packs/PACK/**` changed, the pack's `manifest.yaml` version must
+    # have bumped. The `quality` job above already enforces SemVer validity
+    # of the version itself; this job enforces the bump-when-touched policy.
+    name: Language pack version-bump check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch enough history for `git diff <base>...HEAD` to work — a
+          # shallow clone lacks the merge base for anything but tiny PRs.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "ml/uv.lock"
+
+      - name: Sync ml/ deps (PyYAML)
+        working-directory: ml
+        run: uv sync --frozen --group dev
+
+      - name: Verify pack version bumped
+        working-directory: ml
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: uv run python scripts/verify_pack_version_bump.py --base "$BASE_SHA" --head HEAD

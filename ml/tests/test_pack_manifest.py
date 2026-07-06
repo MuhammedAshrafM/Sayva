@@ -12,6 +12,7 @@ import pytest
 from sayva_ml.packs.manifest import (
     CANONICAL_OUTPUTS,
     OutputLanguageStatus,
+    is_valid_semver,
     load_manifest,
     validate_pack,
 )
@@ -115,6 +116,69 @@ def test_complete_status_implies_no_null_labels() -> None:
                     f"Pack '{pack.recognition_code}' labels/{out_code}.json model "
                     f"'{model_id}' is marked complete but has null entries: {nulls}"
                 )
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["0.1.0", "1.0.0", "12.34.56", "1.2.3-alpha", "0.2.3-beta.1", "1.0.0+build.7"],
+)
+def test_semver_accepts_valid_values(value: str) -> None:
+    assert is_valid_semver(value), f"expected {value!r} to be valid SemVer"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "1", "1.0", "1.2.3.4", "v1.0.0", "1.0.0-", "01.2.3", "1.2.3-beta..1"],
+)
+def test_semver_rejects_invalid_values(value: str) -> None:
+    assert not is_valid_semver(value), f"expected {value!r} to be invalid SemVer"
+
+
+@pytest.mark.parametrize("pack", _all_packs(), ids=lambda p: p.recognition_code)
+def test_every_bundled_pack_ships_valid_semver(pack) -> None:
+    # Guards against a manifest.yaml being hand-edited to a bad version and
+    # somehow bypassing the parse-time check (e.g. someone patching the
+    # generator to skip validation).
+    assert is_valid_semver(pack.version), (
+        f"Pack '{pack.recognition_code}' has invalid version {pack.version!r}."
+    )
+
+
+def test_load_manifest_rejects_empty_version(tmp_path) -> None:
+    _write_pack_with_version(tmp_path, version="")
+    with pytest.raises(ValueError, match="non-empty SemVer"):
+        load_manifest(tmp_path / "broken")
+
+
+def test_load_manifest_rejects_invalid_semver(tmp_path) -> None:
+    _write_pack_with_version(tmp_path, version="1.0")
+    with pytest.raises(ValueError, match="not valid SemVer"):
+        load_manifest(tmp_path / "broken")
+
+
+def _write_pack_with_version(tmp_path, version: str) -> None:
+    """Clone the first real pack into tmp_path and rewrite its version.
+
+    Cheaper than authoring an entire manifest inline: we get every other
+    required field for free and only mutate what the test cares about.
+    """
+    import shutil
+    src = discover_packs().packs[0].pack_root
+    dst = tmp_path / "broken"
+    shutil.copytree(src, dst)
+    manifest_path = dst / "manifest.yaml"
+    text = manifest_path.read_text(encoding="utf-8")
+    # Every canonical pack manifest declares `version: X.Y.Z` on its own line;
+    # a targeted substitution keeps the fixture minimal.
+    import re
+    new_text = re.sub(
+        r"^version:.*$",
+        f"version: {version}" if version else "version: \"\"",
+        text,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    manifest_path.write_text(new_text, encoding="utf-8")
 
 
 def test_missing_labels_file_fails_manifest_load(tmp_path) -> None:
