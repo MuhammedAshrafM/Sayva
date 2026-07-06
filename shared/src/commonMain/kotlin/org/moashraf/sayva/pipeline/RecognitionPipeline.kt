@@ -72,6 +72,17 @@ class DefaultRecognitionPipeline(
     private val translationRenderer: TranslationRenderer,
     private val packController: LanguagePackController,
     private val scope: CoroutineScope,
+    /**
+     * After this many CONSECUTIVE frame-processing errors, the pipeline
+     * cancels its collector and latches at [RecognitionUiState.Error] until
+     * [start] is invoked again. Guards against a corrupt model or a wedged
+     * native handle burning 30 FPS worth of CPU + Crashlytics events until
+     * the user quits.
+     *
+     * Any single successful frame resets the counter — a transient recognizer
+     * hiccup still recovers naturally on the very next frame.
+     */
+    private val frameErrorBackoffThreshold: Int = 5,
 ) : RecognitionPipeline {
 
     private val _state = MutableStateFlow<RecognitionUiState>(RecognitionUiState.Idle)
@@ -102,6 +113,11 @@ class DefaultRecognitionPipeline(
     private var frameCollector: Job? = null
     private var packWatcher: Job? = null
 
+    /** Consecutive frame-processing errors since the last successful frame or
+     *  the last [start]. Mutated only inside [processFrame], which the frame
+     *  collector invokes sequentially — no cross-coroutine access. */
+    private var consecutiveFrameErrors: Int = 0
+
     // Rolling FPS window — smoothed so the debug overlay doesn't jitter.
     private val recentFrameNanos = ArrayDeque<Long>()
 
@@ -115,6 +131,7 @@ class DefaultRecognitionPipeline(
     override suspend fun start(role: String) = mutex.withLock {
         _state.value = RecognitionUiState.Starting
         currentRole = role
+        consecutiveFrameErrors = 0
 
         val ready = packController.state.value as? LanguagePackController.State.Ready
             ?: run {
@@ -164,6 +181,7 @@ class DefaultRecognitionPipeline(
         currentSession?.close()
         currentSession = null
         currentRole = null
+        consecutiveFrameErrors = 0
         recentFrameNanos.clear()
         _state.value = RecognitionUiState.Idle
     }
@@ -303,6 +321,7 @@ class DefaultRecognitionPipeline(
                 fps = updateFps(totalEnd),
             )
 
+            consecutiveFrameErrors = 0
             withContext(Dispatchers.Main) {
                 _state.value = RecognitionUiState.Recognizing(
                     packCode = pack.recognitionCode,
@@ -314,6 +333,7 @@ class DefaultRecognitionPipeline(
                 )
             }
         } catch (t: Throwable) {
+            consecutiveFrameErrors += 1
             withContext(Dispatchers.Main) {
                 _state.value = RecognitionUiState.Error(
                     cause = t,
@@ -321,8 +341,36 @@ class DefaultRecognitionPipeline(
                     modelId = model.id,
                 )
             }
+            if (consecutiveFrameErrors >= frameErrorBackoffThreshold) {
+                // Persistent failure — the model, native detector, or the
+                // frame path itself is wedged. Stop consuming frames so we
+                // don't burn 30 FPS worth of CPU + Crashlytics reports until
+                // the user quits. Requires an explicit `start()` to resume.
+                triggerErrorBackoff()
+            }
         } finally {
             closeFrame(frame)
+        }
+    }
+
+    /**
+     * Tear down the frame collector + pack watcher after persistent frame
+     * errors. Runs on the collector coroutine itself; we launch the cleanup
+     * on [scope] so we don't try to `cancelAndJoin` our own job. State is
+     * already at [RecognitionUiState.Error] — we deliberately do NOT reset
+     * it to Idle so the UI still surfaces the failure to the user.
+     */
+    private fun triggerErrorBackoff() {
+        scope.launch {
+            mutex.withLock {
+                frameCollector?.cancel()
+                packWatcher?.cancel()
+                frameCollector = null
+                packWatcher = null
+                camera.stop()
+                currentSession?.close()
+                currentSession = null
+            }
         }
     }
 

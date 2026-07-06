@@ -223,6 +223,82 @@ class DefaultRecognitionPipelineTest {
     }
 
     @Test
+    fun `four consecutive errors under threshold still recover on next successful frame`() = runBlocking<Unit> {
+        // Fire 4 error frames — one below the default trigger of 5 — then a
+        // good frame. The pipeline must still process the good frame instead
+        // of latching.
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+
+        val detector = handDetectorFactory.createdDetectors.single() as FakeHandDetector
+        val recognizer = signRecognizerFactory.createdRecognizers.single()
+
+        // Sync per-frame on recognizeCount — the collector processes emits
+        // asynchronously and armNextThrow is one-shot, so racing the loop
+        // ahead would leave some frames un-thrown.
+        repeat(4) { attempt ->
+            val prevCount = recognizer.recognizeCount
+            detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+            recognizer.armNextThrow(IllegalStateException("transient $attempt"))
+            camera.emitFrame()
+            waitForCondition { recognizer.recognizeCount > prevCount }
+        }
+
+        // Good frame — must recover
+        val prevCount = recognizer.recognizeCount
+        detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        waitForCondition { recognizer.recognizeCount > prevCount }
+        val recovered = waitForState<RecognitionUiState.Recognizing>()
+        assertNotNull(recovered.prediction)
+        // Camera and detector are still live — no backoff triggered
+        assertEquals(0, camera.stopCount, "backoff must not fire under threshold")
+        assertEquals(0, detector.closeCount, "detector must not close under threshold")
+    }
+
+    @Test
+    fun `three consecutive errors at threshold trigger backoff and latch Error`() = runBlocking<Unit> {
+        // Rebuild pipeline with a low threshold so the test stays fast to read.
+        pipeline = DefaultRecognitionPipeline(
+            camera = camera,
+            handDetectorFactory = handDetectorFactory,
+            signRecognizerFactory = signRecognizerFactory,
+            translationRenderer = translationRenderer,
+            packController = packController,
+            scope = scope,
+            frameErrorBackoffThreshold = 3,
+        )
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+
+        val detector = handDetectorFactory.createdDetectors.single() as FakeHandDetector
+        val recognizer = signRecognizerFactory.createdRecognizers.single()
+
+        repeat(3) { attempt ->
+            val prevCount = recognizer.recognizeCount
+            detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+            recognizer.armNextThrow(IllegalStateException("persistent $attempt"))
+            camera.emitFrame()
+            waitForCondition { recognizer.recognizeCount > prevCount }
+        }
+
+        // Backoff runs asynchronously via scope.launch — poll for its effects.
+        waitForCondition {
+            camera.stopCount == 1 && detector.closeCount == 1 && recognizer.closeCount == 1
+        }
+
+        // State latches at Error — pushing another frame is a no-op because
+        // the collector is dead.
+        assertIs<RecognitionUiState.Error>(pipeline.state.value)
+        val recognizeCountAtLatch = recognizer.recognizeCount
+        camera.emitFrame()
+        kotlinx.coroutines.delay(50)
+        assertEquals(recognizeCountAtLatch, recognizer.recognizeCount,
+            "post-backoff frames must not reach the recognizer")
+        assertIs<RecognitionUiState.Error>(pipeline.state.value)
+    }
+
+    @Test
     fun `recognizer exception on one frame produces Error and recovers on next`() = runBlocking<Unit> {
         givenBootstrappedPack(TestPackFactory.asePack())
         pipeline.start(RecognitionRole.FINGERSPELLING)

@@ -53,8 +53,15 @@ sealed class RecognitionUiState {
     ) : RecognitionUiState()
 
     /**
-     * A frame- or lifecycle-level failure. The pipeline enters this state
-     * and stops emitting until [RecognitionPipeline.start] is called again.
+     * A frame- or lifecycle-level failure. Lifecycle failures (bad pack
+     * state, camera hardware) are terminal — the pipeline stays in this
+     * state until [RecognitionPipeline.start] is called again. Frame-level
+     * failures may be transient: a single glitch is followed by
+     * [Recognizing] on the next frame, but a persistent stream of
+     * exceptions trips the pipeline's backoff (see
+     * `DefaultRecognitionPipeline.frameErrorBackoffThreshold`) after
+     * which recovery again requires an explicit `start()`.
+     *
      * `packCode` / `modelId` may be null if the failure happened during
      * setup before those were resolved.
      */
