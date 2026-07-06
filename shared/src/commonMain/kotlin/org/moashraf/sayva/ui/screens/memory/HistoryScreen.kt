@@ -98,7 +98,7 @@ fun HistoryScreen(nav: SayvaNavController) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(HistoryFilter.entries.toList()) { filter ->
+                items(HistoryFilter.entries.toList(), key = { it.name }) { filter ->
                     val selected = filter == selectedFilter
                     Text(
                         filter.label,
@@ -128,7 +128,7 @@ fun HistoryScreen(nav: SayvaNavController) {
                             modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
                         )
                     }
-                    items(items) { entry ->
+                    items(items, key = { it.id }) { entry ->
                         HistoryRow(entry = entry, onClick = { nav.navigate(Screen.HistoryDetail(entry.id)) })
                         Spacer(Modifier.height(6.dp))
                     }

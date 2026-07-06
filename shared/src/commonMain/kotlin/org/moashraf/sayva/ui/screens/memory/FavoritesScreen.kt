@@ -127,7 +127,7 @@ fun FavoritesScreen(nav: SayvaNavController) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(visibleFavorites) { phrase ->
+                items(visibleFavorites, key = { it.id }) { phrase ->
                     FavoriteCard(phrase = phrase, onClick = { speakText(phrase.text) })
                 }
                 item {

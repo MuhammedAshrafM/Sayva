@@ -81,7 +81,7 @@ fun NotificationsScreen(nav: SayvaNavController) {
                         modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
                     )
                 }
-                items(items) { notification ->
+                items(items, key = { it.id }) { notification ->
                     NotificationRow(notification)
                     Spacer(Modifier.height(6.dp))
                 }

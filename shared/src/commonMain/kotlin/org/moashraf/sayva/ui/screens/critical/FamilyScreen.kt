@@ -97,7 +97,7 @@ fun FamilyScreen(nav: SayvaNavController) {
                 }
             }
 
-            items(members) { member ->
+            items(members, key = { it.id }) { member ->
                 FamilyMemberRow(member = member)
                 Spacer(Modifier.height(6.dp))
             }

@@ -174,7 +174,7 @@ fun HomeScreen(nav: SayvaNavController) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(quickActions) { action ->
+            items(quickActions, key = { it.label }) { action ->
                 Column(
                     modifier = Modifier
                         .background(action.bg, RoundedCornerShape(16.dp))

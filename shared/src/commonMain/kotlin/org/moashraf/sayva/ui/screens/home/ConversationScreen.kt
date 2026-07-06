@@ -148,7 +148,13 @@ fun ConversationScreen(nav: SayvaNavController) {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(transcript) { line -> TranscriptBubble(line, onSpeak = { speakText(line.text) }) }
+                items(
+                    transcript,
+                    // Static demo transcript has no domain id, so key on the
+                    // composite of time + text. If this ever becomes a live
+                    // dynamic list, replace with a real message id.
+                    key = { line -> "${line.time}␟${line.text}" },
+                ) { line -> TranscriptBubble(line, onSpeak = { speakText(line.text) }) }
                 item { TypingBubble() }
             }
         }

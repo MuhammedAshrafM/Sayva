@@ -119,7 +119,7 @@ fun OfflineModelsScreen(nav: SayvaNavController) {
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            items(downloaded) { pack ->
+            items(downloaded, key = { it.id }) { pack ->
                 DownloadedPackRow(pack = pack, onRemove = { downloadedIds = downloadedIds - pack.id })
                 Spacer(Modifier.height(6.dp))
             }
@@ -133,7 +133,7 @@ fun OfflineModelsScreen(nav: SayvaNavController) {
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
-            items(available) { pack ->
+            items(available, key = { it.id }) { pack ->
                 AvailablePackRow(pack = pack, onDownload = { downloadedIds = downloadedIds + pack.id })
                 Spacer(Modifier.height(6.dp))
             }

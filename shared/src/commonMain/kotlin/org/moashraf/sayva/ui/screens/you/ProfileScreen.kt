@@ -251,7 +251,7 @@ fun ProfileScreen(nav: SayvaNavController) {
                 }
             }
 
-            items(menuRows) { row ->
+            items(menuRows, key = { it.title }) { row ->
                 ProfileMenuRowItem(row = row, onClick = { nav.navigate(row.target) })
                 Spacer(Modifier.height(4.dp))
             }

@@ -173,7 +173,7 @@ fun ProgressScreen(nav: SayvaNavController) {
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            items(badges) { badge ->
+            items(badges, key = { it.id }) { badge ->
                 BadgeCard(badge)
             }
         }
