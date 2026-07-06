@@ -17,7 +17,7 @@ recognitionCode: ase                     # ISO 639-3 sign-language code
 displayName:
   en: American Sign Language
   ar: لغة الإشارة الأمريكية              # stub — pending native review
-version: 0.1.0                            # SemVer for the pack as a whole
+version: 0.2.0                            # SemVer for the pack as a whole
 minAppVersion: 1                          # bumps if the pack requires new app APIs
 bundled: true                             # ships in the APK (MVP pack)
 
