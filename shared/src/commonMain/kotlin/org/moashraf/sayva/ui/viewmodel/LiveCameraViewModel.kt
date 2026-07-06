@@ -5,6 +5,8 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.moashraf.sayva.camera.CameraController
 import org.moashraf.sayva.languagepack.LanguagePackController
@@ -68,6 +70,12 @@ class LiveCameraViewModel(
 
     private var mirrorJob: kotlinx.coroutines.Job? = null
 
+    /** Coroutine that suspends waiting for pack Ready and then starts the
+     *  pipeline. Held here so [onScreenLeft] can cancel a pending start — a
+     *  user leaving the screen during the ~200ms bootstrap window must not
+     *  wake the camera after the fact. */
+    private var pendingStartJob: kotlinx.coroutines.Job? = null
+
     /**
      * All roles supported by the active pack. UI mode selector shows only
      * these; picking one calls [setMode].
@@ -81,7 +89,8 @@ class LiveCameraViewModel(
         }
 
     fun onScreenEntered(initialMode: String = RecognitionRole.FINGERSPELLING) {
-        scope.launch {
+        pendingStartJob?.cancel()
+        pendingStartJob = scope.launch {
             // Gate on camera permission BEFORE touching the pipeline. If
             // denied, we surface CameraPermissionRequired and let the screen
             // route to PermissionsScreen. The pipeline never sees a failed
@@ -92,13 +101,25 @@ class LiveCameraViewModel(
                 return@launch
             }
 
+            // Wait for the pack subsystem to be Ready before logging or
+            // starting the pipeline. Otherwise a user who reaches LiveCamera
+            // in the ~200ms window between app launch and pack bootstrap
+            // completing would (a) emit a `recognition_started` event tagged
+            // `pack_code=unknown` — corrupting analytics — and (b) see the
+            // pipeline immediately fault into Error via its own not-ready
+            // guard. Suspending here surfaces neither: the screen shows the
+            // pipeline's `Idle` state (the initial view state) until Ready.
+            val ready = packController.state
+                .filterIsInstance<LanguagePackController.State.Ready>()
+                .first()
+
             crashReporter.setKey("recognition_active", "true")
             crashReporter.setKey("recognition_mode", initialMode)
             analytics.logEvent(
                 AnalyticsEvents.RECOGNITION_STARTED,
                 mapOf(
                     AnalyticsEvents.Param.MODE to initialMode,
-                    AnalyticsEvents.Param.PACK_CODE to (activePackCode() ?: "unknown"),
+                    AnalyticsEvents.Param.PACK_CODE to ready.currentPack.recognitionCode,
                 ),
             )
             startMirroringPipeline()
@@ -128,12 +149,19 @@ class LiveCameraViewModel(
 
     fun setMode(role: String) {
         scope.launch {
+            // Same rationale as `onScreenEntered`: wait for a Ready pack so
+            // the mode-change event carries a real pack code, and the
+            // pipeline's setMode call resolves against a valid session.
+            val ready = packController.state
+                .filterIsInstance<LanguagePackController.State.Ready>()
+                .first()
+
             crashReporter.setKey("recognition_mode", role)
             analytics.logEvent(
                 AnalyticsEvents.RECOGNITION_MODE_CHANGED,
                 mapOf(
                     AnalyticsEvents.Param.MODE to role,
-                    AnalyticsEvents.Param.PACK_CODE to (activePackCode() ?: "unknown"),
+                    AnalyticsEvents.Param.PACK_CODE to ready.currentPack.recognitionCode,
                 ),
             )
             pipeline.setMode(role)
@@ -141,6 +169,10 @@ class LiveCameraViewModel(
     }
 
     fun onScreenLeft() {
+        // Cancel a pending start first so a Ready arriving mid-teardown
+        // doesn't restart the pipeline after we've asked it to stop.
+        pendingStartJob?.cancel()
+        pendingStartJob = null
         scope.launch {
             mirrorJob?.cancel()
             mirrorJob = null
@@ -150,7 +182,4 @@ class LiveCameraViewModel(
         }
     }
 
-    private fun activePackCode(): String? =
-        (packController.state.value as? LanguagePackController.State.Ready)
-            ?.currentPack?.recognitionCode
 }
