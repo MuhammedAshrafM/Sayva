@@ -317,9 +317,14 @@ private fun ModeSelector(
 @Composable
 private fun DiagnosticsChip(state: RecognitionUiState) {
     val d = (state as? RecognitionUiState.Recognizing)?.diagnostics ?: return
+    // Latency buckets are now attributed per-stage — `ComposedSignRecognizer`
+    // populates the split. `pre` covers landmarks → model input, `inf` is
+    // ModelRuntime.invoke, `post` is postprocess. `det` remains MediaPipe.
     Text(
         "${d.fps.toInt()} fps · det ${(d.handDetectionNanos / 1_000_000)} ms · " +
+            "pre ${(d.preprocessingNanos / 1_000_000)} ms · " +
             "inf ${(d.inferenceNanos / 1_000_000)} ms · " +
+            "post ${(d.postprocessingNanos / 1_000_000)} ms · " +
             "hands ${d.handsDetected}",
         style = MaterialTheme.typography.labelSmall,
         color = Color.White.copy(alpha = 0.7f),

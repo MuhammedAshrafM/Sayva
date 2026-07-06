@@ -14,4 +14,12 @@ package org.moashraf.sayva.ml
 data class RecognitionResult(
     val classIndex: Int,
     val confidence: Float,
+    /** Nanoseconds spent inside the preprocessor — landmarks → model input.
+     *  Zero when the recognizer doesn't instrument its stages (e.g. test fakes,
+     *  legacy adapters). Populated by [ComposedSignRecognizer]. */
+    val preprocessingNanos: Long = 0L,
+    /** Nanoseconds spent inside the model runtime's `invoke`. */
+    val inferenceNanos: Long = 0L,
+    /** Nanoseconds spent inside the postprocessor — raw output → class + prob. */
+    val postprocessingNanos: Long = 0L,
 )

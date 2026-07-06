@@ -415,6 +415,51 @@ class DefaultRecognitionPipelineTest {
     }
 
     @Test
+    fun `diagnostics carry per-stage timings from recognizer result`() = runBlocking<Unit> {
+        // ComposedSignRecognizer times pre / inference / post and stuffs them
+        // into the RecognitionResult; the pipeline must thread each into the
+        // matching PipelineDiagnostics bucket instead of collapsing them.
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+
+        val detector = handDetectorFactory.createdDetectors.single() as FakeHandDetector
+        val recognizer = signRecognizerFactory.createdRecognizers.single()
+        detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+        recognizer.setResult(
+            RecognitionResult(
+                classIndex = 0,
+                confidence = 0.95f,
+                preprocessingNanos = 1_234_567L,
+                inferenceNanos = 7_654_321L,
+                postprocessingNanos = 111_222L,
+            ),
+        )
+        camera.emitFrame()
+
+        val d = waitForState<RecognitionUiState.Recognizing>().diagnostics
+        assertEquals(1_234_567L, d.preprocessingNanos, "pipeline must forward preprocessing timing")
+        assertEquals(7_654_321L, d.inferenceNanos, "pipeline must forward inference timing")
+        assertEquals(111_222L, d.postprocessingNanos, "pipeline must forward postprocessing timing")
+    }
+
+    @Test
+    fun `no-hand frame reports zero per-stage timings`() = runBlocking<Unit> {
+        // No recognizer call happens on empty detections — the three ML
+        // stage buckets must read zero rather than leftover values.
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+
+        val detector = handDetectorFactory.createdDetectors.single() as FakeHandDetector
+        detector.armNextDetection(TestPackFactory.handDetection(hands = 0))
+        camera.emitFrame()
+
+        val d = waitForState<RecognitionUiState.Recognizing>().diagnostics
+        assertEquals(0L, d.preprocessingNanos)
+        assertEquals(0L, d.inferenceNanos)
+        assertEquals(0L, d.postprocessingNanos)
+    }
+
+    @Test
     fun `diagnostics latencies are non-zero after real work`() = runBlocking<Unit> {
         // Guards the timeNanos() regression — previously TimeSource.markNow().elapsedNow()
         // returned ~0 for every call because the mark was captured inline.

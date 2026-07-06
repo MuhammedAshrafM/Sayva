@@ -165,7 +165,7 @@ class FakeHandDetectorFactory(
 // ---------------------------------------------------------------------------
 
 class FakeSignRecognizer(
-    private val result: RecognitionResult = RecognitionResult(classIndex = 0, confidence = 0.95f),
+    private var result: RecognitionResult = RecognitionResult(classIndex = 0, confidence = 0.95f),
 ) : SignRecognizer {
 
     var recognizeCount: Int = 0
@@ -192,6 +192,12 @@ class FakeSignRecognizer(
 
     fun armNextThrow(t: Throwable) {
         nextThrow = t
+    }
+
+    /** Overwrite the canned result so tests can assert the pipeline threads
+     *  per-stage timings from `RecognitionResult` into `PipelineDiagnostics`. */
+    fun setResult(next: RecognitionResult) {
+        result = next
     }
 }
 

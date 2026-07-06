@@ -279,14 +279,16 @@ class DefaultRecognitionPipeline(
             val handDetectionNanos = detection.processingNanos
 
             val prediction: Prediction?
-            val inferenceStart: Long
-            val postStart: Long
+            val preprocessingNanos: Long
+            val inferenceNanos: Long
+            val postprocessingNanos: Long
 
             if (detection.hands.isEmpty()) {
                 // No hand this frame — still emit a heartbeat so diagnostics update.
                 prediction = null
-                inferenceStart = timeNanos()
-                postStart = inferenceStart
+                preprocessingNanos = 0L
+                inferenceNanos = 0L
+                postprocessingNanos = 0L
             } else {
                 // Assemble model input. Single-hand: use the first detected hand's
                 // 42 floats. Two-hand: concatenate `[left, right]` with zero-fill
@@ -296,9 +298,10 @@ class DefaultRecognitionPipeline(
                     2 -> assembleTwoHand(detection)
                     else -> error("Unsupported maxHands ${model.input.maxHands}")
                 }
-                inferenceStart = timeNanos()
                 val result = rec.recognize(landmarks)
-                postStart = timeNanos()
+                preprocessingNanos = result.preprocessingNanos
+                inferenceNanos = result.inferenceNanos
+                postprocessingNanos = result.postprocessingNanos
                 prediction = buildPrediction(pack, model, result)
             }
 
@@ -310,12 +313,9 @@ class DefaultRecognitionPipeline(
                 architecture = model.architecture,
                 totalFrameNanos = totalEnd - totalStart,
                 handDetectionNanos = handDetectionNanos,
-                // preprocessing time is inside recognize() — treat inferenceStart→postStart
-                // as inference-inclusive; preprocessing surfaces as a bucketed diagnostic
-                // when we split ComposedSignRecognizer to expose the split (Phase 2 follow-up).
-                preprocessingNanos = 0L,
-                inferenceNanos = postStart - inferenceStart,
-                postprocessingNanos = totalEnd - postStart,
+                preprocessingNanos = preprocessingNanos,
+                inferenceNanos = inferenceNanos,
+                postprocessingNanos = postprocessingNanos,
                 handsDetected = detection.hands.size,
                 confidence = prediction?.confidence,
                 fps = updateFps(totalEnd),

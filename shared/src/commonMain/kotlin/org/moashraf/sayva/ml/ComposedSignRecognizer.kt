@@ -1,5 +1,6 @@
 package org.moashraf.sayva.ml
 
+import kotlin.time.TimeSource
 import org.moashraf.sayva.languagepack.SignVocabulary
 
 /**
@@ -26,12 +27,30 @@ class ComposedSignRecognizer(
 ) : SignRecognizer {
 
     override fun recognize(landmarks: FloatArray): RecognitionResult {
+        // Per-stage timing so `PipelineDiagnostics` can attribute latency
+        // between preprocess / inference / postprocess. Uses one mark and
+        // three deltas — cheaper than three separate `markNow` pairs.
+        val t0 = TimeSource.Monotonic.markNow()
         val preprocessed = preprocessor.preprocess(landmarks)
+        val preprocessingNanos = t0.elapsedNow().inWholeNanoseconds
+
         require(preprocessed.size == expectedInputElements) {
             "Preprocessed input is ${preprocessed.size} floats; model expects $expectedInputElements"
         }
+
+        val t1 = TimeSource.Monotonic.markNow()
         val rawOutput = runtime.invoke(preprocessed)
-        return postprocessor.postprocess(rawOutput, vocabulary)
+        val inferenceNanos = t1.elapsedNow().inWholeNanoseconds
+
+        val t2 = TimeSource.Monotonic.markNow()
+        val result = postprocessor.postprocess(rawOutput, vocabulary)
+        val postprocessingNanos = t2.elapsedNow().inWholeNanoseconds
+
+        return result.copy(
+            preprocessingNanos = preprocessingNanos,
+            inferenceNanos = inferenceNanos,
+            postprocessingNanos = postprocessingNanos,
+        )
     }
 
     override fun close() {
