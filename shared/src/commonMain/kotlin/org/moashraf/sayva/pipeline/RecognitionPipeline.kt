@@ -19,8 +19,10 @@ import org.moashraf.sayva.languagepack.LanguagePackController
 import org.moashraf.sayva.languagepack.PackModel
 import org.moashraf.sayva.languagepack.SignRecognizerFactory
 import org.moashraf.sayva.languagepack.TranslationRenderer
+import org.moashraf.sayva.languagepack.TwoHandOrdering
 import org.moashraf.sayva.ml.HandDetector
 import org.moashraf.sayva.ml.HandDetectorFactory
+import org.moashraf.sayva.ml.Handedness
 import org.moashraf.sayva.ml.PipelineDiagnostics
 import org.moashraf.sayva.ml.SignRecognizer
 
@@ -295,7 +297,7 @@ class DefaultRecognitionPipeline(
                 // when a hand is missing.
                 val landmarks: FloatArray = when (model.input.maxHands) {
                     1 -> detection.hands.first().landmarks
-                    2 -> assembleTwoHand(detection)
+                    2 -> assembleTwoHand(detection, model)
                     else -> error("Unsupported maxHands ${model.input.maxHands}")
                 }
                 val result = rec.recognize(landmarks)
@@ -374,13 +376,39 @@ class DefaultRecognitionPipeline(
         }
     }
 
-    private fun assembleTwoHand(detection: org.moashraf.sayva.ml.HandDetection): FloatArray {
-        // For MVP: put first hand in slot 0, second in slot 1. Handedness-aware
-        // routing (Left → slot 0, Right → slot 1) is a Phase 2 follow-up —
-        // needs the preprocessor to advertise its ordering convention.
+    /**
+     * Route MediaPipe detections into the model's two-hand input tensor per
+     * the pack's declared [TwoHandOrdering]. A pack that hasn't declared an
+     * ordering falls back to [TwoHandOrdering.FirstSeen] — matches the
+     * pre-field behavior for anything the parser still lets through (e.g.
+     * older manifests during a migration).
+     *
+     * Slots are 42 floats each; a missing hand's slot is zero-filled.
+     */
+    private fun assembleTwoHand(
+        detection: org.moashraf.sayva.ml.HandDetection,
+        model: PackModel,
+    ): FloatArray {
         val out = FloatArray(84)
-        detection.hands.getOrNull(0)?.landmarks?.copyInto(out, 0)
-        detection.hands.getOrNull(1)?.landmarks?.copyInto(out, 42)
+        val ordering = model.input.twoHandOrdering ?: TwoHandOrdering.FirstSeen
+        when (ordering) {
+            TwoHandOrdering.LeftRight -> {
+                val left = detection.hands.firstOrNull { it.handedness == Handedness.Left }
+                val right = detection.hands.firstOrNull { it.handedness == Handedness.Right }
+                left?.landmarks?.copyInto(out, 0)
+                right?.landmarks?.copyInto(out, 42)
+            }
+            TwoHandOrdering.RightLeft -> {
+                val right = detection.hands.firstOrNull { it.handedness == Handedness.Right }
+                val left = detection.hands.firstOrNull { it.handedness == Handedness.Left }
+                right?.landmarks?.copyInto(out, 0)
+                left?.landmarks?.copyInto(out, 42)
+            }
+            TwoHandOrdering.FirstSeen -> {
+                detection.hands.getOrNull(0)?.landmarks?.copyInto(out, 0)
+                detection.hands.getOrNull(1)?.landmarks?.copyInto(out, 42)
+            }
+        }
         return out
     }
 

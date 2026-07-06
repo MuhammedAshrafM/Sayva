@@ -108,15 +108,27 @@ object PackManifestParser {
 
         val inputObj = obj["input"]?.jsonObject
             ?: error("model '$id' missing 'input'")
+        val maxHands = inputObj.int("maxHands")
+        require(maxHands in 1..2) {
+            "model '$id' maxHands must be 1 or 2, got $maxHands"
+        }
+        val orderingRaw = inputObj["twoHandOrdering"]?.jsonPrimitive?.contentOrNull
+        val twoHandOrdering = when {
+            maxHands == 2 && orderingRaw == null ->
+                error("model '$id' has maxHands=2 and must declare 'twoHandOrdering'")
+            maxHands == 1 && orderingRaw != null ->
+                error("model '$id' declares 'twoHandOrdering' but maxHands=$maxHands; " +
+                    "the field is only valid for two-hand models")
+            orderingRaw == null -> null
+            else -> TwoHandOrdering.fromWireValue(orderingRaw)
+        }
         val input = ModelInputSpec(
             shape = inputObj.array("shape").map { it.jsonPrimitive.int },
             preprocessing = inputObj.string("preprocessing"),
-            maxHands = inputObj.int("maxHands"),
+            maxHands = maxHands,
             sequenceLength = inputObj["sequenceLength"]?.jsonPrimitive?.intOrNull,
+            twoHandOrdering = twoHandOrdering,
         )
-        require(input.maxHands in 1..2) {
-            "model '$id' maxHands must be 1 or 2, got ${input.maxHands}"
-        }
 
         val outputObj = obj["output"]?.jsonObject
             ?: error("model '$id' missing 'output'")

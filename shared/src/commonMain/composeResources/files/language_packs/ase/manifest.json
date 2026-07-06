@@ -156,7 +156,8 @@
         ],
         "preprocessing": "two_hand_sequence_v1",
         "maxHands": 2,
-        "sequenceLength": 30
+        "sequenceLength": 30,
+        "twoHandOrdering": "left_right"
       },
       "output": {
         "shape": [

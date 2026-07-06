@@ -25,7 +25,10 @@ import org.moashraf.sayva.data.repository.SettingsRepository
 import org.moashraf.sayva.data.repository.SettingsState
 import org.moashraf.sayva.languagepack.LanguagePackController
 import org.moashraf.sayva.languagepack.RecognitionRole
+import org.moashraf.sayva.languagepack.TwoHandOrdering
 import org.moashraf.sayva.ml.HandDetection
+import org.moashraf.sayva.ml.HandLandmarks
+import org.moashraf.sayva.ml.Handedness
 import org.moashraf.sayva.ml.RecognitionResult
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -199,6 +202,100 @@ class DefaultRecognitionPipelineTest {
         assertEquals(42, recognizer.lastInputSize, "single-hand model must receive 42 floats")
         assertNotNull(recognizing.prediction)
         assertEquals("A", recognizing.prediction!!.label)
+    }
+
+    @Test
+    fun `two-hand model with left_right ordering routes Left to slot 0 Right to slot 1`() = runBlocking<Unit> {
+        // Guards against regressing to the old "first-seen" assumption. Emit
+        // hands in Right-then-Left order and assert the pipeline still puts
+        // the Left-hand landmarks in the first 42 floats per manifest contract.
+        val pack = TestPackFactory.pack(
+            recognitionCode = TestPackFactory.ASE_CODE,
+            displayName = mapOf("en" to "ASL", "ar" to "ASL"),
+            models = listOf(TestPackFactory.temporalModel(TwoHandOrdering.LeftRight)),
+        )
+        givenBootstrappedPack(pack)
+        pipeline.start(RecognitionRole.SIGN_RECOGNITION)
+
+        val leftLandmarks = FloatArray(42) { 1.0f }   // marker for Left
+        val rightLandmarks = FloatArray(42) { 2.0f }  // marker for Right
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(
+                HandDetection(
+                    hands = listOf(
+                        HandLandmarks(Handedness.Right, rightLandmarks),
+                        HandLandmarks(Handedness.Left, leftLandmarks),
+                    ),
+                    processingNanos = 10_000L,
+                ),
+            )
+        camera.emitFrame()
+
+        waitForState<RecognitionUiState.Recognizing>()
+        val input = signRecognizerFactory.createdRecognizers.single().lastInputRef!!
+        assertEquals(84, input.size)
+        assertEquals(1.0f, input[0], "slot 0 must hold LEFT hand landmarks")
+        assertEquals(2.0f, input[42], "slot 1 must hold RIGHT hand landmarks")
+    }
+
+    @Test
+    fun `two-hand model with right_left ordering swaps the slots`() = runBlocking<Unit> {
+        val pack = TestPackFactory.pack(
+            recognitionCode = TestPackFactory.ASE_CODE,
+            displayName = mapOf("en" to "ASL", "ar" to "ASL"),
+            models = listOf(TestPackFactory.temporalModel(TwoHandOrdering.RightLeft)),
+        )
+        givenBootstrappedPack(pack)
+        pipeline.start(RecognitionRole.SIGN_RECOGNITION)
+
+        val leftLandmarks = FloatArray(42) { 1.0f }
+        val rightLandmarks = FloatArray(42) { 2.0f }
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(
+                HandDetection(
+                    hands = listOf(
+                        HandLandmarks(Handedness.Left, leftLandmarks),
+                        HandLandmarks(Handedness.Right, rightLandmarks),
+                    ),
+                    processingNanos = 10_000L,
+                ),
+            )
+        camera.emitFrame()
+
+        waitForState<RecognitionUiState.Recognizing>()
+        val input = signRecognizerFactory.createdRecognizers.single().lastInputRef!!
+        assertEquals(2.0f, input[0], "slot 0 must hold RIGHT hand landmarks under right_left")
+        assertEquals(1.0f, input[42], "slot 1 must hold LEFT hand landmarks under right_left")
+    }
+
+    @Test
+    fun `two-hand model with left_right zero-fills missing hand slot`() = runBlocking<Unit> {
+        // Only a Right hand is detected — Left slot must be zero-filled, not
+        // populated by the Right hand's own landmarks.
+        val pack = TestPackFactory.pack(
+            recognitionCode = TestPackFactory.ASE_CODE,
+            displayName = mapOf("en" to "ASL", "ar" to "ASL"),
+            models = listOf(TestPackFactory.temporalModel(TwoHandOrdering.LeftRight)),
+        )
+        givenBootstrappedPack(pack)
+        pipeline.start(RecognitionRole.SIGN_RECOGNITION)
+
+        val rightLandmarks = FloatArray(42) { 3.0f }
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(
+                HandDetection(
+                    hands = listOf(HandLandmarks(Handedness.Right, rightLandmarks)),
+                    processingNanos = 10_000L,
+                ),
+            )
+        camera.emitFrame()
+
+        waitForState<RecognitionUiState.Recognizing>()
+        val input = signRecognizerFactory.createdRecognizers.single().lastInputRef!!
+        (0 until 42).forEach { i ->
+            assertEquals(0.0f, input[i], "missing Left slot must zero-fill at index $i")
+        }
+        assertEquals(3.0f, input[42], "Right slot must carry the detected hand")
     }
 
     @Test

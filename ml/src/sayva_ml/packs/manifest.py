@@ -36,12 +36,33 @@ class OutputLanguageStatus(str, enum.Enum):
     COMPLETE = "complete"  # Every vocab entry has a reviewed translation
 
 
+# Ordering conventions for two-hand model input assembly. Each two-hand pack
+# picks one — the recognition pipeline routes MediaPipe detections into the
+# model's input slots based on this. Single-hand models (max_hands == 1) leave
+# this field unset.
+#
+# * left_right  — slot 0 = Left hand landmarks, slot 1 = Right (zero-filled
+#                 when a hand is missing). Matches the convention most
+#                 fingerspelling / two-hand-sign models trained on datasets
+#                 that pre-label handedness.
+# * right_left  — mirror of the above; some Asian sign language datasets
+#                 label dominant-first, which for a majority-right-handed
+#                 signer corpus maps to right-first.
+# * first_seen  — preserve the detector's emission order. Useful when the
+#                 model was trained on unlabeled hand pairs (e.g. WLASL
+#                 clips where handedness metadata is inconsistent).
+TWO_HAND_ORDERINGS: tuple[str, ...] = ("left_right", "right_left", "first_seen")
+
+
 @dataclass(frozen=True)
 class ModelInputSpec:
     shape: tuple[int, ...]
     preprocessing: str           # Preprocessor adapter ID (registry key on the app side)
     max_hands: int               # 1 or 2 — pipeline uses this to configure HandDetector
     sequence_length: int | None = None
+    # Present only when max_hands == 2; validated at parse time. Value is one
+    # of TWO_HAND_ORDERINGS. See that constant's docstring for semantics.
+    two_hand_ordering: str | None = None
 
 
 @dataclass(frozen=True)
@@ -126,11 +147,30 @@ def _parse_model(raw: dict[str, Any], pack_root: Path, source: Path) -> ModelSpe
         raise ValueError(
             f"{source}: model '{raw['id']}' maxHands must be 1 or 2, got {max_hands}"
         )
+    two_hand_ordering_raw = inp.get("twoHandOrdering")
+    if max_hands == 2:
+        if two_hand_ordering_raw is None:
+            raise ValueError(
+                f"{source}: model '{raw['id']}' has maxHands=2 and must "
+                f"declare 'twoHandOrdering' (one of {TWO_HAND_ORDERINGS})."
+            )
+        if two_hand_ordering_raw not in TWO_HAND_ORDERINGS:
+            raise ValueError(
+                f"{source}: model '{raw['id']}' twoHandOrdering "
+                f"{two_hand_ordering_raw!r} must be one of {TWO_HAND_ORDERINGS}"
+            )
+    else:
+        if two_hand_ordering_raw is not None:
+            raise ValueError(
+                f"{source}: model '{raw['id']}' declares 'twoHandOrdering' but "
+                f"maxHands={max_hands}; the field is only valid for two-hand models."
+            )
     input_spec = ModelInputSpec(
         shape=tuple(int(x) for x in inp["shape"]),
         preprocessing=str(inp["preprocessing"]),
         max_hands=max_hands,
         sequence_length=int(inp["sequenceLength"]) if "sequenceLength" in inp else None,
+        two_hand_ordering=two_hand_ordering_raw,
     )
 
     out = raw["output"]

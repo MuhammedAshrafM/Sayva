@@ -23,6 +23,7 @@ import org.moashraf.sayva.languagepack.PostProcessingRules
 import org.moashraf.sayva.languagepack.SignVocabulary
 import org.moashraf.sayva.languagepack.SignRecognizerFactory
 import org.moashraf.sayva.languagepack.TranslationRenderer
+import org.moashraf.sayva.languagepack.TwoHandOrdering
 import org.moashraf.sayva.languagepack.VocabSign
 import org.moashraf.sayva.ml.HandDetection
 import org.moashraf.sayva.ml.HandDetector
@@ -174,11 +175,17 @@ class FakeSignRecognizer(
         private set
     var lastInputSize: Int? = null
         private set
+
+    /** Full copy of the most recent input — tests use this to assert that the
+     *  pipeline routed hands into slots correctly (see two-hand ordering tests). */
+    var lastInputRef: FloatArray? = null
+        private set
     private var nextThrow: Throwable? = null
 
     override fun recognize(landmarks: FloatArray): RecognitionResult {
         recognizeCount++
         lastInputSize = landmarks.size
+        lastInputRef = landmarks.copyOf()
         nextThrow?.let {
             nextThrow = null
             throw it
@@ -358,7 +365,9 @@ object TestPackFactory {
         ),
     )
 
-    fun temporalModel(): PackModel = PackModel(
+    fun temporalModel(
+        twoHandOrdering: TwoHandOrdering = TwoHandOrdering.LeftRight,
+    ): PackModel = PackModel(
         id = "temporal_v1",
         role = "sign_recognition",
         architecture = "lstm_unrolled",
@@ -370,6 +379,7 @@ object TestPackFactory {
             preprocessing = "two_hand_sequence_v1",
             maxHands = 2,
             sequenceLength = 30,
+            twoHandOrdering = twoHandOrdering,
         ),
         output = ModelOutputSpec(
             shape = listOf(1, 5),

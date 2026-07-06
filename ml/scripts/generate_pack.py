@@ -108,6 +108,11 @@ def _build_manifest_json(manifest: LanguagePackManifest) -> dict:
                         if m.input.sequence_length is not None
                         else {}
                     ),
+                    **(
+                        {"twoHandOrdering": m.input.two_hand_ordering}
+                        if m.input.two_hand_ordering is not None
+                        else {}
+                    ),
                 },
                 "output": {
                     "shape": list(m.output.shape),

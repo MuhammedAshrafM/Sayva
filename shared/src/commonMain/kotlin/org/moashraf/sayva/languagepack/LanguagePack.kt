@@ -123,7 +123,46 @@ data class ModelInputSpec(
      */
     val maxHands: Int,
     val sequenceLength: Int? = null,
+    /**
+     * How the recognition pipeline routes MediaPipe detections into the
+     * two-hand input tensor. Present only when [maxHands] is 2; a null on
+     * a two-hand model would mean the manifest didn't advertise its
+     * contract and is rejected at parse time.
+     *
+     * See [TwoHandOrdering] for the allowed values.
+     */
+    val twoHandOrdering: TwoHandOrdering? = null,
 )
+
+/**
+ * A pack-declared convention for how the recognition pipeline arranges the
+ * two hands MediaPipe detected into the model's input slots.
+ *
+ * The manifest ships the string form (`"left_right"`, `"right_left"`,
+ * `"first_seen"`) — this enum is the parsed representation. When adding a
+ * new value, update [TwoHandOrdering.fromWireValue] AND the pipeline's
+ * `assembleTwoHand` in `RecognitionPipeline.kt`.
+ */
+enum class TwoHandOrdering(val wireValue: String) {
+    /** Left hand → slot 0, Right → slot 1. Missing hand's slot is zero-filled. */
+    LeftRight("left_right"),
+    /** Right hand → slot 0, Left → slot 1. Missing hand's slot is zero-filled. */
+    RightLeft("right_left"),
+    /**
+     * Preserve the detector's emission order. First detected hand goes to
+     * slot 0, second to slot 1 — legacy behavior before this field existed.
+     */
+    FirstSeen("first_seen");
+
+    companion object {
+        fun fromWireValue(raw: String): TwoHandOrdering =
+            entries.firstOrNull { it.wireValue == raw }
+                ?: throw IllegalArgumentException(
+                    "Unknown twoHandOrdering '$raw'. Must be one of " +
+                        entries.joinToString(", ") { "'${it.wireValue}'" }
+                )
+    }
+}
 
 data class ModelOutputSpec(
     val shape: List<Int>,

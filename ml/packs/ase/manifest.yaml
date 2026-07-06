@@ -73,6 +73,11 @@ models:
       preprocessing: two_hand_sequence_v1
       sequenceLength: 30
       maxHands: 2
+      # Slot 0 = Left hand landmarks, slot 1 = Right. Required for every
+      # two-hand model — the pipeline routes MediaPipe detections into slots
+      # based on this contract instead of hardcoding "first seen → slot 0".
+      # See TWO_HAND_ORDERINGS in ml/src/sayva_ml/packs/manifest.py.
+      twoHandOrdering: left_right
     output:
       shape: [1, 5]
       postprocessing: argmax_confidence_v1
