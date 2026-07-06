@@ -17,6 +17,7 @@
 | [AI Pipeline](AI_PIPELINE.md) | Sign language recognition pipeline design |
 | [Data Model](DATA_MODEL.md) | Data classes, mock data, and storage |
 | [Accessibility](ACCESSIBILITY.md) | Accessibility features and compliance |
+| [Language Pack Workflow](PACKS_WORKFLOW.md) | Language-agnostic pack authoring, validation, and CI roadmap |
 | [Changelog](CHANGELOG.md) | Version history |
 | [Roadmap](ROADMAP.md) | Planned features and improvement recommendations |
 
