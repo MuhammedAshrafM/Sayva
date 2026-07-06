@@ -150,7 +150,10 @@ sqldelight {
 // if they've drifted from what the current pack sources would produce.
 //
 // `verifyPacks` runs on `check` — CI catches stale distributed artifacts.
-// Local developers regenerate with `./gradlew regeneratePacks`.
+// Local developers regenerate with `./gradlew generatePacks`. Naming
+// follows docs/PACKS_WORKFLOW.md, which is authoritative for the pack
+// dev workflow across all phases (Phase 1 today: explicit task; Phase 2:
+// verify-on-assemble; Phase 3: split CI + OTA publish).
 val mlDir = rootProject.file("ml")
 val packScript = mlDir.resolve("scripts/generate_pack.py")
 val packsSourceDir = mlDir.resolve("packs")
@@ -170,7 +173,7 @@ val verifyPacks = tasks.register<Exec>("verifyPacks") {
     isIgnoreExitValue = false
 }
 
-val regeneratePacks = tasks.register<Exec>("regeneratePacks") {
+val generatePacks = tasks.register<Exec>("generatePacks") {
     group = "build"
     description =
         "Distributes every ml/packs/*/ into composeResources/files/language_packs/."

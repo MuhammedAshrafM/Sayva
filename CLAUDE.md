@@ -17,6 +17,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew :shared:testAndroidHostTest
 ./gradlew :shared:iosSimulatorArm64Test
 
+# Language Packs (see docs/PACKS_WORKFLOW.md)
+./gradlew :shared:generatePacks   # regenerate distributed manifest.json + models
+./gradlew :shared:verifyPacks     # dry-run: fail if regeneration would rewrite anything
+
 # iOS: open in Xcode and run from there
 open iosApp/iosApp.xcodeproj
 ```
