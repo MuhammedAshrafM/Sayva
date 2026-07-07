@@ -27,6 +27,7 @@ import org.moashraf.sayva.permission.SayvaPermission
 import org.moashraf.sayva.pipeline.DefaultRecognitionPipeline
 import org.moashraf.sayva.pipeline.RecognitionPipeline
 import org.moashraf.sayva.pipeline.RecognitionUiState
+import org.moashraf.sayva.speech.speakText
 import org.moashraf.sayva.telemetry.AnalyticsEvents
 import org.moashraf.sayva.telemetry.AnalyticsGateway
 import org.moashraf.sayva.telemetry.CrashReporter
@@ -339,17 +340,32 @@ class LiveCameraViewModel(
     }
 
     /**
+     * Speak the current prediction's label via the platform TTS gateway.
+     * No-op when there's no prediction — the UI dims the Speak button in
+     * those states, but the ViewModel guards anyway.
+     */
+    fun speakCurrentLabel() {
+        val label = state.value.currentLabel() ?: return
+        speakText(label)
+    }
+
+    /**
      * Copy the current prediction's label to the platform clipboard. No-op
      * when there's no prediction to copy (state is not Recognizing/Paused
      * or the last prediction was null).
      */
     fun copyLabel() {
-        val label = when (val current = state.value) {
-            is RecognitionUiState.Recognizing -> current.prediction?.label
-            is RecognitionUiState.Paused -> current.prediction?.label
-            else -> null
-        } ?: return
+        val label = state.value.currentLabel() ?: return
         clipboard.copyText(label, label = "Sayva")
         analytics.logEvent(AnalyticsEvents.RECOGNITION_LABEL_COPIED)
+    }
+
+    /** Pull the current label off any state that carries a prediction. Kept
+     *  as an extension so `speakCurrentLabel` and `copyLabel` read state
+     *  identically — no drift between the two audio/clipboard paths. */
+    private fun RecognitionUiState.currentLabel(): String? = when (this) {
+        is RecognitionUiState.Recognizing -> prediction?.label
+        is RecognitionUiState.Paused -> prediction?.label
+        else -> null
     }
 }
