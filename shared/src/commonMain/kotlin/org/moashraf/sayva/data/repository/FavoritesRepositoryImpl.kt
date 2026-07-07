@@ -8,10 +8,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color
 import org.moashraf.sayva.data.FavoritePhrase
 import org.moashraf.sayva.data.MockSayvaData
 import org.moashraf.sayva.db.FavoritePhraseEntity
 import org.moashraf.sayva.db.SayvaDatabase
+import org.moashraf.sayva.designsystem.Primary40
+import org.moashraf.sayva.designsystem.Tertiary50
 
 /**
  * SQLDelight-backed [FavoritesRepository]. Gradients are encoded as pipe-separated
@@ -87,6 +90,56 @@ class FavoritesRepositoryImpl(
     override suspend fun delete(id: String) {
         queries.delete(id)
     }
+
+    // -----------------------------------------------------------------
+    // Live-recognition provenance
+    // -----------------------------------------------------------------
+
+    /**
+     * Deterministic id prefix that reserves the `sign:` namespace for
+     * favorites created from live recognition. Curated / seed favorites
+     * (from MockSayvaData) use short ids like `"f1"`, `"f2"` — never
+     * collide.
+     */
+    private companion object {
+        const val SIGN_ID_PREFIX = "sign"
+        const val RECOGNIZED_CATEGORY = "RECOGNIZED"
+        const val RECOGNIZED_ICON = "auto_awesome"
+    }
+
+    override fun favoriteIdForSign(packCode: String, signId: String): String =
+        "$SIGN_ID_PREFIX:$packCode:$signId"
+
+    override suspend fun toggleFavoriteFromSign(
+        packCode: String,
+        signId: String,
+        label: String,
+    ): Boolean {
+        val id = favoriteIdForSign(packCode, signId)
+        val existing = queries.selectById(id).executeAsOneOrNull()
+        return if (existing != null) {
+            queries.delete(id)
+            false
+        } else {
+            upsert(
+                FavoritePhrase(
+                    id = id,
+                    category = RECOGNIZED_CATEGORY,
+                    text = label,
+                    gradient = defaultRecognitionGradient(),
+                    icon = RECOGNIZED_ICON,
+                    isEmergency = false,
+                ),
+            )
+            true
+        }
+    }
+
+    /** Two-stop gradient reused across every recognition-sourced favorite.
+     *  Kept language-neutral (no pack-provided colors) — packs can grow their
+     *  own theming in a later iteration without changing this repository. */
+    private fun defaultRecognitionGradient(): List<Color> =
+        listOf(Primary40, Tertiary50)
 
     // -----------------------------------------------------------------
 
