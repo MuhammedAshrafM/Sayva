@@ -239,6 +239,11 @@ private fun BottomOverlay(
                     )
                 }
             }
+            is RecognitionUiState.Paused -> {
+                // Dev screen: reuse the same card; the production redesign
+                // (P2-S7) surfaces pause visually.
+                RecognitionCard(prediction = state.prediction)
+            }
         }
     }
 }
@@ -345,6 +350,7 @@ private fun packChipText(state: RecognitionUiState): String = when (state) {
     RecognitionUiState.CameraPermissionRequired -> "· permission needed"
     is RecognitionUiState.NoModelForMode -> "${state.packCode.uppercase()} · no model"
     is RecognitionUiState.Recognizing -> "${state.packCode.uppercase()} · ${prettyRoleName(state.role)}"
+    is RecognitionUiState.Paused -> "${state.packCode.uppercase()} · paused"
     is RecognitionUiState.Error -> "error"
 }
 

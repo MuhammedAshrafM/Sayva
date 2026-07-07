@@ -417,6 +417,132 @@ class DefaultRecognitionPipelineTest {
     }
 
     // -----------------------------------------------------------------------
+    // Pause / resume — camera + native handles stay bound; frames become no-op
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `pause transitions from Recognizing to Paused with last snapshot`() = runBlocking<Unit> {
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        val recognizing = waitForState<RecognitionUiState.Recognizing>()
+
+        pipeline.pause()
+        val paused = waitForState<RecognitionUiState.Paused>()
+        assertEquals(recognizing.packCode, paused.packCode)
+        assertEquals(recognizing.modelId, paused.modelId)
+        assertEquals(recognizing.role, paused.role)
+        assertEquals(recognizing.architecture, paused.architecture)
+        assertEquals(recognizing.prediction, paused.prediction)
+        assertEquals(recognizing.diagnostics, paused.diagnostics)
+    }
+
+    @Test
+    fun `pause does NOT tear down camera or native handles`() = runBlocking<Unit> {
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        waitForState<RecognitionUiState.Recognizing>()
+
+        val stopCountBeforePause = camera.stopCount
+        val detectorBeforePause = handDetectorFactory.createdDetectors.single()
+        val recognizerBeforePause = signRecognizerFactory.createdRecognizers.single()
+
+        pipeline.pause()
+        waitForState<RecognitionUiState.Paused>()
+
+        assertEquals(stopCountBeforePause, camera.stopCount,
+            "pause() must NOT call camera.stop()")
+        assertEquals(1, handDetectorFactory.createdDetectors.size,
+            "pause() must NOT rebuild the hand detector")
+        assertEquals(1, signRecognizerFactory.createdRecognizers.size,
+            "pause() must NOT rebuild the recognizer")
+        assertTrue(detectorBeforePause === handDetectorFactory.createdDetectors.single())
+        assertTrue(recognizerBeforePause === signRecognizerFactory.createdRecognizers.single())
+    }
+
+    @Test
+    fun `frames emitted while paused are dropped without touching recognizer`() = runBlocking<Unit> {
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+        val detector = handDetectorFactory.createdDetectors.single() as FakeHandDetector
+        val recognizer = signRecognizerFactory.createdRecognizers.single()
+
+        detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        waitForState<RecognitionUiState.Recognizing>()
+        val recognizeCountAtPause = recognizer.recognizeCount
+
+        pipeline.pause()
+        waitForState<RecognitionUiState.Paused>()
+
+        // Try to push three frames while paused — pipeline must drop them
+        // without dispatching to the recognizer.
+        repeat(3) {
+            detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+            camera.emitFrame()
+        }
+        delay(150) // give the collector time to see + drop them
+        assertEquals(recognizeCountAtPause, recognizer.recognizeCount,
+            "recognizer.recognize() must not be called while paused")
+        assertIs<RecognitionUiState.Paused>(pipeline.state.value)
+    }
+
+    @Test
+    fun `resume returns to Recognizing on the next frame`() = runBlocking<Unit> {
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+        val detector = handDetectorFactory.createdDetectors.single() as FakeHandDetector
+
+        detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        waitForState<RecognitionUiState.Recognizing>()
+
+        pipeline.pause()
+        waitForState<RecognitionUiState.Paused>()
+
+        pipeline.resume()
+        detector.armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        val resumed = waitForState<RecognitionUiState.Recognizing>()
+        assertNotNull(resumed.prediction)
+    }
+
+    @Test
+    fun `pause is idempotent`() = runBlocking<Unit> {
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        waitForState<RecognitionUiState.Recognizing>()
+
+        pipeline.pause()
+        val first = waitForState<RecognitionUiState.Paused>()
+        pipeline.pause() // no-op
+        assertIs<RecognitionUiState.Paused>(pipeline.state.value)
+        assertEquals(first, pipeline.state.value)
+    }
+
+    @Test
+    fun `resume without pause is a no-op`() = runBlocking<Unit> {
+        givenBootstrappedPack(TestPackFactory.asePack())
+        pipeline.start(RecognitionRole.FINGERSPELLING)
+        (handDetectorFactory.createdDetectors.single() as FakeHandDetector)
+            .armNextDetection(TestPackFactory.handDetection(hands = 1))
+        camera.emitFrame()
+        val recognizing = waitForState<RecognitionUiState.Recognizing>()
+
+        pipeline.resume() // no-op — not paused
+        assertEquals(recognizing, pipeline.state.value)
+    }
+
+    // -----------------------------------------------------------------------
     // Session lifecycle — pack switch, mode switch, stop
     // -----------------------------------------------------------------------
 

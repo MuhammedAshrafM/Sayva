@@ -63,6 +63,20 @@ interface RecognitionPipeline {
     /** Change modes without restarting the camera. */
     suspend fun setMode(role: String)
 
+    /**
+     * Suspend frame processing WITHOUT tearing down camera / detector /
+     * recognizer. State transitions to [RecognitionUiState.Paused] with the
+     * last-known prediction. Idempotent — a second call is a no-op.
+     * A subsequent [resume] returns to [RecognitionUiState.Recognizing] on
+     * the very next frame.
+     *
+     * No-op when not currently recognizing.
+     */
+    suspend fun pause()
+
+    /** Undo [pause]. No-op when not currently paused. */
+    suspend fun resume()
+
     /** Release camera + native resources. Safe to call repeatedly. */
     suspend fun stop()
 }
@@ -120,6 +134,11 @@ class DefaultRecognitionPipeline(
      *  collector invokes sequentially — no cross-coroutine access. */
     private var consecutiveFrameErrors: Int = 0
 
+    /** True while [pause] is in effect. Frame collector still receives frames
+     *  from the camera flow but [processFrame] early-returns after closing the
+     *  proxy — keeps camera / detector / recognizer warm for instant resume. */
+    private var paused: Boolean = false
+
     // Rolling FPS window — smoothed so the debug overlay doesn't jitter.
     private val recentFrameNanos = ArrayDeque<Long>()
 
@@ -134,6 +153,7 @@ class DefaultRecognitionPipeline(
         _state.value = RecognitionUiState.Starting
         currentRole = role
         consecutiveFrameErrors = 0
+        paused = false
 
         val ready = packController.state.value as? LanguagePackController.State.Ready
             ?: run {
@@ -171,6 +191,33 @@ class DefaultRecognitionPipeline(
         if (ready != null) buildForActivePack(role, ready.currentPack)
     }
 
+    override suspend fun pause(): Unit = mutex.withLock {
+        // Only meaningful when we're mid-recognition; otherwise the caller
+        // has misused the lifecycle and we no-op rather than latch state.
+        val snapshot = _state.value as? RecognitionUiState.Recognizing ?: return@withLock
+        if (paused) return@withLock
+        paused = true
+        withContext(Dispatchers.Main) {
+            _state.value = RecognitionUiState.Paused(
+                packCode = snapshot.packCode,
+                modelId = snapshot.modelId,
+                role = snapshot.role,
+                architecture = snapshot.architecture,
+                prediction = snapshot.prediction,
+                diagnostics = snapshot.diagnostics,
+            )
+        }
+    }
+
+    override suspend fun resume(): Unit = mutex.withLock {
+        if (!paused) return@withLock
+        paused = false
+        // The next frame processed will overwrite state with Recognizing.
+        // We do NOT restore the previous Recognizing snapshot here — the
+        // very next frame from the (still-running) camera will emit an
+        // authoritative one within ~16-33 ms.
+    }
+
     override suspend fun stop(): Unit = mutex.withLock {
         // Stop collectors first, then wait for them to drain, then close native
         // handles. This order matters: closing before joining could race
@@ -184,6 +231,7 @@ class DefaultRecognitionPipeline(
         currentSession = null
         currentRole = null
         consecutiveFrameErrors = 0
+        paused = false
         recentFrameNanos.clear()
         _state.value = RecognitionUiState.Idle
     }
@@ -268,7 +316,12 @@ class DefaultRecognitionPipeline(
         // during this frame's processing don't tear our references. If no
         // session is active (Idle, Error, NoModelForMode), close the frame
         // and drop — no diagnostics update needed.
-        val session = mutex.withLock { currentSession } ?: return closeFrame(frame)
+        val (session, isPaused) = mutex.withLock { currentSession to paused }
+        if (session == null) return closeFrame(frame)
+        // Pause path: camera / detector / recognizer are all warm but we
+        // deliberately don't consume the frame. Just close the proxy so
+        // CameraX gets its buffer back and state stays at Paused.
+        if (isPaused) return closeFrame(frame)
 
         val model = session.model
         val pack = session.pack
@@ -319,6 +372,7 @@ class DefaultRecognitionPipeline(
                 inferenceNanos = inferenceNanos,
                 postprocessingNanos = postprocessingNanos,
                 handsDetected = detection.hands.size,
+                primaryHandedness = detection.hands.firstOrNull()?.handedness,
                 confidence = prediction?.confidence,
                 fps = updateFps(totalEnd),
             )

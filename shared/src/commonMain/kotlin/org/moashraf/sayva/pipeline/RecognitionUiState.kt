@@ -53,6 +53,25 @@ sealed class RecognitionUiState {
     ) : RecognitionUiState()
 
     /**
+     * Recognition is paused — camera + detector + recognizer are still bound
+     * and warm, but the pipeline is intentionally not consuming frames.
+     * Carries the last-known prediction + diagnostics so the UI can freeze
+     * on them visibly ("look, here's what we saw last") rather than clear.
+     *
+     * Resume via `RecognitionPipeline.resume()`; the next frame after that
+     * transitions back to [Recognizing]. Leaving the screen still calls
+     * `stop()` for a full teardown.
+     */
+    data class Paused(
+        val packCode: String,
+        val modelId: String,
+        val role: String,
+        val architecture: String,
+        val prediction: Prediction?,
+        val diagnostics: PipelineDiagnostics,
+    ) : RecognitionUiState()
+
+    /**
      * A frame- or lifecycle-level failure. Lifecycle failures (bad pack
      * state, camera hardware) are terminal — the pipeline stays in this
      * state until [RecognitionPipeline.start] is called again. Frame-level

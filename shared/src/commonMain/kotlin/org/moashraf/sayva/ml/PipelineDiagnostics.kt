@@ -1,5 +1,6 @@
 package org.moashraf.sayva.ml
 
+
 /**
  * Per-frame diagnostics emitted alongside each recognition result. The
  * recognition pipeline builds one of these on every processed frame and
@@ -38,6 +39,13 @@ data class PipelineDiagnostics(
 
     /** Number of hands MediaPipe found in this frame. */
     val handsDetected: Int,
+    /**
+     * Handedness of the first (highest-confidence) detected hand, when any.
+     * The production LiveCameraScreen renders a "HAND DETECTED · <side>"
+     * pill from this — the field is language-neutral because handedness
+     * doesn't depend on the active pack.
+     */
+    val primaryHandedness: Handedness?,
     /** Softmax confidence of the winning class, when a prediction happened. */
     val confidence: Float?,
     /**
