@@ -43,12 +43,28 @@ DEFAULT_HAND_LANDMARKER_TASK = (
 _MP_HANDS: Any = None
 
 
-def init_worker(task_path: str | None = None) -> None:
+DEFAULT_MIN_HAND_DETECTION_CONFIDENCE = 0.5
+
+
+def init_worker(
+    task_path: str | None = None,
+    min_hand_detection_confidence: float = DEFAULT_MIN_HAND_DETECTION_CONFIDENCE,
+) -> None:
     """`ProcessPoolExecutor(initializer=…)` hook — build one HandLandmarker
     per worker.
 
     Uses MediaPipe's Tasks Vision API (`mediapipe.tasks.vision.HandLandmarker`);
     the older `mediapipe.solutions.hands` module was removed after 0.10.14.
+
+    Args:
+        task_path: absolute path to a HandLandmarker `.task` bundle. Defaults
+            to the Android app's bundled copy so both platforms run identical
+            model bytes.
+        min_hand_detection_confidence: MediaPipe threshold for accepting a
+            candidate hand detection. Lower values catch more hands (at the
+            cost of more false detections); higher values are stricter.
+            Callers tune this per experiment — the default matches the
+            Android runtime for parity.
     """
     global _MP_HANDS
     from mediapipe import Image, ImageFormat  # noqa: F401 — re-exported via detect()
@@ -65,7 +81,7 @@ def init_worker(task_path: str | None = None) -> None:
     options = mp_vision.HandLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=str(resolved)),
         num_hands=1,
-        min_hand_detection_confidence=0.5,
+        min_hand_detection_confidence=min_hand_detection_confidence,
         running_mode=mp_vision.RunningMode.IMAGE,
     )
     _MP_HANDS = mp_vision.HandLandmarker.create_from_options(options)

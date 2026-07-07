@@ -78,6 +78,16 @@ def main() -> int:
         default=0.5,
         help="Fail if any class MediaPipe detection rate falls below this.",
     )
+    parser.add_argument(
+        "--min-hand-detection-confidence",
+        type=float,
+        default=0.5,
+        help=(
+            "MediaPipe HandLandmarker's accept threshold for a candidate hand. "
+            "Lower catches more hands (with more false positives); higher is stricter. "
+            "Default matches the Android runtime for parity. Recorded in stats.json."
+        ),
+    )
     parser.add_argument("--train-ratio", type=float, default=0.75)
     parser.add_argument("--val-ratio", type=float, default=0.125)
     parser.add_argument("--seed", type=int, default=42)
@@ -97,6 +107,7 @@ def main() -> int:
     print(f"vocabulary:   {vocab.size} signs ({sorted(s.id for s in vocab.signs)})")
     print(f"output:       {output}")
     print(f"workers:      {args.workers}")
+    print(f"min-hand-conf: {args.min_hand_detection_confidence}")
     if args.max_per_class:
         print(f"max-per-class: {args.max_per_class}")
     print()
@@ -110,6 +121,7 @@ def main() -> int:
         val_ratio=args.val_ratio,
         max_per_class=args.max_per_class,
         min_detection_rate=args.min_detection_rate,
+        min_hand_detection_confidence=args.min_hand_detection_confidence,
         seed=args.seed,
     )
     total = len(split.X_train) + len(split.X_val) + len(split.X_test)

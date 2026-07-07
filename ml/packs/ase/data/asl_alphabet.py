@@ -167,6 +167,7 @@ def build_cache(  # noqa: PLR0913
     val_ratio: float = 0.125,
     max_per_class: int | None = None,
     min_detection_rate: float = MIN_CLASS_DETECTION_RATE,
+    min_hand_detection_confidence: float = 0.5,
     seed: int = 42,
     progress: bool = True,
 ) -> RealDatasetSplit:
@@ -184,6 +185,11 @@ def build_cache(  # noqa: PLR0913
         min_detection_rate: Reject the build if any class falls below this
             per-class MediaPipe detection rate. Guards against silently
             training on lopsided data.
+        min_hand_detection_confidence: MediaPipe's own accept threshold for
+            a candidate hand. Lower catches more hands (including some
+            false positives); higher is stricter. Recorded in the stats.json
+            so downstream analyses know which detector config produced
+            which cache.
         seed: RNG seed for shuffling within stratified partitions.
         progress: Print a per-1000-image progress line.
 
@@ -221,7 +227,11 @@ def build_cache(  # noqa: PLR0913
 
     start = time.perf_counter()
     completed = 0
-    with ProcessPoolExecutor(max_workers=workers, initializer=init_worker) as pool:
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        initializer=init_worker,
+        initargs=(None, min_hand_detection_confidence),
+    ) as pool:
         futures = [pool.submit(extract_one, p) for p in image_paths]
         for fut in as_completed(futures):
             letter, vec = fut.result()
@@ -249,6 +259,7 @@ def build_cache(  # noqa: PLR0913
             {
                 "dataset_dir": str(dataset_dir),
                 "min_detection_rate_threshold": min_detection_rate,
+                "min_hand_detection_confidence": min_hand_detection_confidence,
                 "build": stats.to_json_dict(),
             },
             indent=2,
