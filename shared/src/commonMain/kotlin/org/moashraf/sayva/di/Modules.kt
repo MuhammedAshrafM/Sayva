@@ -36,6 +36,8 @@ import org.moashraf.sayva.db.SayvaDatabase
 import org.moashraf.sayva.getPlatform
 import org.moashraf.sayva.camera.CameraController
 import org.moashraf.sayva.camera.CameraControllerProvider
+import org.moashraf.sayva.clipboard.Clipboard
+import org.moashraf.sayva.clipboard.ClipboardProvider
 import org.moashraf.sayva.languagepack.ComposeResourcePackLoader
 import org.moashraf.sayva.languagepack.DefaultLanguagePackRegistry
 import org.moashraf.sayva.languagepack.DefaultSignRecognizerFactory
@@ -203,6 +205,10 @@ val sayvaModule = module {
     // pipeline receives factories, not the singletons, so tests can stub.
     single<CameraController> { CameraControllerProvider.create() }
     single<HandDetectorFactory> { DefaultHandDetectorFactory() }
+
+    // Platform clipboard bridge — ClipboardManager on Android, UIPasteboard
+    // on iOS. UI never imports the platform types.
+    single<Clipboard> { ClipboardProvider.create() }
 
     // ---- Repositories -------------------------------------------------------
     // ViewModels depend on interfaces only. All 7 repo impls now shipped.
