@@ -108,6 +108,11 @@ class SettingsRepositoryImpl(
         it.copy(screenReaderHints = enabled)
     }
 
+    override fun setDeveloperMode(enabled: Boolean) = update {
+        storage.putBoolean(K_DEVELOPER_MODE, enabled)
+        it.copy(developerMode = enabled)
+    }
+
     override fun resetToDefaults() {
         // Clear only the keys we own — don't clobber other consumers of the
         // same SettingsStorage instance (there aren't any today, but stay safe).
@@ -117,7 +122,7 @@ class SettingsRepositoryImpl(
             K_LARGER_TEXT, K_COLOR_BLIND, K_LEFT_HANDED, K_HAPTIC,
             K_REDUCE_MOTION, K_SCREEN_READER_HINTS,
             K_RECOGNITION_LANGUAGE, K_OUTPUT_LANGUAGE,
-            K_ONBOARDING_COMPLETED,
+            K_ONBOARDING_COMPLETED, K_DEVELOPER_MODE,
         ).forEach(storage::remove)
         _state.value = SettingsState()
     }
@@ -154,6 +159,8 @@ class SettingsRepositoryImpl(
             outputLanguageCode = storage.getString(K_OUTPUT_LANGUAGE),
             onboardingCompleted = storage.getBoolean(K_ONBOARDING_COMPLETED)
                 ?: defaults.onboardingCompleted,
+            developerMode = storage.getBoolean(K_DEVELOPER_MODE)
+                ?: defaults.developerMode,
         )
     }
 
@@ -175,5 +182,6 @@ class SettingsRepositoryImpl(
         const val K_RECOGNITION_LANGUAGE = "languagepack.recognitionCode"
         const val K_OUTPUT_LANGUAGE = "languagepack.outputCode"
         const val K_ONBOARDING_COMPLETED = "onboarding.completed"
+        const val K_DEVELOPER_MODE = "developer.mode"
     }
 }

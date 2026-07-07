@@ -88,6 +88,9 @@ class SettingsViewModel(
     fun onScreenReaderHintsToggle(enabled: Boolean) {
         repository.setScreenReaderHints(enabled); log("screen_reader_hints", enabled)
     }
+    fun onDeveloperModeToggle(enabled: Boolean) {
+        repository.setDeveloperMode(enabled); log("developer_mode", enabled)
+    }
 
     fun onResetToDefaults() {
         repository.resetToDefaults(); log("reset", "defaults")

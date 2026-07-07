@@ -51,6 +51,14 @@ interface SettingsRepository {
     fun setReduceMotion(enabled: Boolean)
     fun setScreenReaderHints(enabled: Boolean)
 
+    /**
+     * Enable the developer HUD — per-stage latencies, model / pack identity,
+     * sign id vs displayed label, and any other diagnostics beyond what the
+     * production LiveCameraScreen surfaces by default. Off by default so a
+     * casual user never sees it.
+     */
+    fun setDeveloperMode(enabled: Boolean)
+
     /** Reset every setting to its default. */
     fun resetToDefaults()
 }
@@ -84,6 +92,11 @@ data class SettingsState(
     // `true` once the user has finished the first-run onboarding flow.
     // Read by the startup coordinator to decide the initial destination.
     val onboardingCompleted: Boolean = false,
+
+    // Developer HUD (per-stage latencies, model + pack identity, etc.) on
+    // LiveCameraScreen. Off by default; the production UI never surfaces
+    // this without the user turning it on in Settings.
+    val developerMode: Boolean = false,
 
     // Accessibility
     val easyMode: Boolean = false,

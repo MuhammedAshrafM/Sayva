@@ -169,5 +169,6 @@ private class StartupFakeSettings(initial: SettingsState = SettingsState()) : Se
     override fun setHapticIntensity(intensity: Float) {}
     override fun setReduceMotion(enabled: Boolean) {}
     override fun setScreenReaderHints(enabled: Boolean) {}
+    override fun setDeveloperMode(enabled: Boolean) {}
     override fun resetToDefaults() { _state.value = SettingsState() }
 }

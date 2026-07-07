@@ -205,6 +205,23 @@ fun SettingsScreen(nav: SayvaNavController) {
             item { SettingsSectionLabel("DIAGNOSTICS") }
             item {
                 SettingsRow(
+                    icon = "code",
+                    iconColor = OnSurfaceVariant,
+                    title = "Developer mode",
+                    subtitle = if (state.developerMode)
+                        "On · Live camera shows per-stage latencies, pack + model identity"
+                    else
+                        "Off · Recommended for daily use",
+                ) {
+                    Switch(
+                        checked = state.developerMode,
+                        onCheckedChange = viewModel::onDeveloperModeToggle,
+                        colors = SwitchDefaults.colors(checkedTrackColor = Tertiary50),
+                    )
+                }
+            }
+            item {
+                SettingsRow(
                     icon = "bug_report",
                     iconColor = OnSurfaceVariant,
                     title = "System states",
