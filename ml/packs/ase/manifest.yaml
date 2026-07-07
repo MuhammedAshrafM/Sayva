@@ -17,7 +17,7 @@ recognitionCode: ase                     # ISO 639-3 sign-language code
 displayName:
   en: American Sign Language
   ar: لغة الإشارة الأمريكية              # stub — pending native review
-version: 0.2.0                            # SemVer for the pack as a whole
+version: 0.3.0                            # SemVer for the pack as a whole
 minAppVersion: 1                          # bumps if the pack requires new app APIs
 bundled: true                             # ships in the APK (MVP pack)
 
@@ -38,7 +38,7 @@ models:
     # hardcodes model IDs (which vary per-pack) and instead binds by role.
     role: fingerspelling
     architecture: mlp
-    file: models/exported/fingerspelling_v0.1.0/model.tflite
+    file: models/exported/fingerspelling_v0.2.0/model.tflite
     runtime:
       type: tflite
     inferenceStrategy: single_frame

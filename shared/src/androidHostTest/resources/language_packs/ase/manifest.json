@@ -5,7 +5,7 @@
     "en": "American Sign Language",
     "ar": "لغة الإشارة الأمريكية"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": 1,
   "bundled": true,
   "models": [
@@ -139,7 +139,7 @@
         ]
       },
       "integrity": {
-        "sha256": "1ca3278913e9eaf0331811317710152ae09180bace749255fbd1a5a55fe90cb0",
+        "sha256": "32e2a2d9248c4ef54f8104f0eb7a9447534c5e36d53b0bfb8c912022677fd2e6",
         "sizeBytes": 7064
       }
     },

@@ -27,15 +27,15 @@ from pathlib import Path
 import torch
 
 from sayva_ml.models.fingerspelling_mlp import FingerspellingMLP
-from sayva_ml.vocabulary import CONFIGS_DIR, load_vocabulary
+from sayva_ml.packs.registry import DEFAULT_PACKS_ROOT
+from sayva_ml.vocabulary import load_vocabulary
 
 _ML_ROOT = Path(__file__).resolve().parents[3]
 _REPO_ROOT = _ML_ROOT.parent
-_EXPORT_ROOT = _ML_ROOT / "models" / "exported"
 
 
-def convert(version: str, quantize: bool = True) -> Path:
-    """Emit `model.tflite` alongside `model.pt`.
+def convert(pack: str, version: str, quantize: bool = True) -> Path:
+    """Emit `model.tflite` alongside `model.pt` inside the pack tree.
 
     `quantize=True` produces dynamic-range INT8 quantization (Kazuhito's
     default). The MLP is tiny so quantization mostly affects load time, not
@@ -43,14 +43,16 @@ def convert(version: str, quantize: bool = True) -> Path:
     """
     from ai_edge_torch import convert as ai_convert  # type: ignore[import-not-found]
 
-    version_dir = _EXPORT_ROOT / version
+    pack_root = DEFAULT_PACKS_ROOT / pack
+    version_dir = pack_root / "models" / "exported" / version
     checkpoint = version_dir / "model.pt"
     if not checkpoint.exists():
         raise SystemExit(
-            f"Missing {checkpoint}. Run train_fingerspelling.py --version {version} first."
+            f"Missing {checkpoint}. Run train_fingerspelling.py "
+            f"--pack {pack} --version {version} first."
         )
 
-    vocab = load_vocabulary(CONFIGS_DIR / "fingerspelling.yaml")
+    vocab = load_vocabulary(pack_root / "vocabularies" / "fingerspelling.yaml")
     model = FingerspellingMLP(num_classes=vocab.size)
     model.load_state_dict(torch.load(checkpoint, map_location="cpu"))
     model.eval()
@@ -71,12 +73,17 @@ def convert(version: str, quantize: bool = True) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--pack",
+        default="ase",
+        help="Recognition-language pack code (packs/{code}/manifest.yaml).",
+    )
     parser.add_argument("--version", default="fingerspelling_v0.1.0")
     parser.add_argument("--no-quantize", action="store_true")
     args = parser.parse_args()
 
-    out = convert(version=args.version, quantize=not args.no_quantize)
-    print(f"wrote: {out.relative_to(_REPO_ROOT)} ({out.stat().st_size} bytes)")
+    out = convert(pack=args.pack, version=args.version, quantize=not args.no_quantize)
+    print(f"wrote: {out.resolve().relative_to(_REPO_ROOT)} ({out.stat().st_size} bytes)")
     return 0
 
 
