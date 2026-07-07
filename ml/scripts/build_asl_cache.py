@@ -28,7 +28,6 @@ After this succeeds, kick off training:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import multiprocessing
 import sys
 from pathlib import Path
@@ -37,23 +36,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _ML_ROOT = _REPO_ROOT / "ml"
 sys.path.insert(0, str(_ML_ROOT / "src"))
 
+from sayva_ml.packs.data_loader import load_pack_data_module  # noqa: E402
 from sayva_ml.packs.registry import DEFAULT_PACKS_ROOT  # noqa: E402
 from sayva_ml.vocabulary import load_vocabulary  # noqa: E402
-
-
-def _load_pack_data_module(pack_root: Path, module_name: str):
-    """Dynamically load `packs/{code}/data/{module_name}.py` — packs are data
-    + optional Python code, not a Python package."""
-    path = pack_root / "data" / f"{module_name}.py"
-    if not path.exists():
-        raise SystemExit(f"Missing pack data module: {path}")
-    spec = importlib.util.spec_from_file_location(
-        f"_pack_{pack_root.name}_{module_name}", path
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def main() -> int:
@@ -102,7 +87,7 @@ def main() -> int:
     if not pack_root.exists():
         raise SystemExit(f"Pack '{args.pack}' not found at {pack_root}")
 
-    asl = _load_pack_data_module(pack_root, "asl_alphabet")
+    asl = load_pack_data_module(pack_root, "asl_alphabet")
     output = args.output or pack_root / "data" / "cache" / "asl_alphabet.npz"
 
     vocab = load_vocabulary(pack_root / "vocabularies" / "fingerspelling.yaml")

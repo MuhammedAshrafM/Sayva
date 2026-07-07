@@ -39,6 +39,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from sayva_ml.data.synthetic import SyntheticSplit, make_split
 from sayva_ml.models.fingerspelling_mlp import FingerspellingMLP, parameter_count
+from sayva_ml.packs.data_loader import load_pack_data_module
 from sayva_ml.packs.manifest import LanguagePackManifest, load_manifest
 from sayva_ml.packs.registry import DEFAULT_PACKS_ROOT
 
@@ -88,7 +89,7 @@ def _load_data(source: str, num_classes: int, samples_per_class: int, seed: int)
     if source == "asl-alphabet":
         # Pack-specific dataset loader lives inside packs/ase/data/. Loaded
         # dynamically via importlib so `sayva_ml/` stays language-neutral.
-        asl_module = _load_pack_data_module(DEFAULT_PACKS_ROOT / "ase", "asl_alphabet")
+        asl_module = load_pack_data_module(DEFAULT_PACKS_ROOT / "ase", "asl_alphabet")
 
         cache = _CACHE_ROOT / "asl_alphabet.npz"
         if not cache.exists():
@@ -98,30 +99,6 @@ def _load_data(source: str, num_classes: int, samples_per_class: int, seed: int)
             )
         return _to_split(asl_module.load_cache(cache))
     raise ValueError(f"Unknown data source: {source}")
-
-
-def _load_pack_data_module(pack_root: Path, module_name: str):
-    """Load `packs/{code}/data/{module_name}.py` via importlib.
-
-    Packs are data + optional Python code — they are not part of the
-    `sayva_ml` package tree. Training scripts stay language-neutral by
-    reaching into a pack's data directory dynamically only when the user
-    picks that data source.
-    """
-    import importlib.util
-
-    path = pack_root / "data" / f"{module_name}.py"
-    if not path.exists():
-        raise SystemExit(
-            f"Pack '{pack_root.name}' has no data loader '{module_name}' at {path}."
-        )
-    spec = importlib.util.spec_from_file_location(
-        f"_pack_{pack_root.name}_{module_name}", path
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def _load_pack(pack_code: str) -> LanguagePackManifest:

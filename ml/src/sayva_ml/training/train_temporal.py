@@ -36,6 +36,7 @@ from sayva_ml.models.temporal_lstm import (
     TemporalSignLstm,
     parameter_count,
 )
+from sayva_ml.packs.data_loader import load_pack_data_module
 from sayva_ml.packs.manifest import LanguagePackManifest, load_manifest
 from sayva_ml.packs.registry import DEFAULT_PACKS_ROOT
 
@@ -52,23 +53,6 @@ def _load_pack(pack_code: str) -> LanguagePackManifest:
     return load_manifest(DEFAULT_PACKS_ROOT / pack_code)
 
 
-def _load_pack_data_module(pack_root: Path, module_name: str):
-    """Dynamically load `packs/{code}/data/{module_name}.py` — see
-    `train_fingerspelling.py._load_pack_data_module` for rationale."""
-    import importlib.util
-
-    path = pack_root / "data" / f"{module_name}.py"
-    if not path.exists():
-        raise SystemExit(
-            f"Pack '{pack_root.name}' has no data loader '{module_name}' at {path}."
-        )
-    spec = importlib.util.spec_from_file_location(
-        f"_pack_{pack_root.name}_{module_name}", path
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 @dataclass(frozen=True)
@@ -109,7 +93,7 @@ def _load_data(
             )
         )
     if source == "wlasl":
-        wlasl_module = _load_pack_data_module(DEFAULT_PACKS_ROOT / "ase", "wlasl")
+        wlasl_module = load_pack_data_module(DEFAULT_PACKS_ROOT / "ase", "wlasl")
 
         cache = _CACHE_ROOT / "wlasl_toy.npz"
         if not cache.exists():

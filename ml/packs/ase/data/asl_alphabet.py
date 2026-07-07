@@ -49,7 +49,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sayva_ml.preprocessing.landmark import pre_process_landmark
+from sayva_ml.data.mediapipe_workers import extract_one, init_worker
+from sayva_ml.preprocessing.landmark import pre_process_landmark  # noqa: F401 — kept for backward-compat imports
 from sayva_ml.vocabulary import Vocabulary
 
 # Sentinel — updated by the caller when the dataset lands.
@@ -106,53 +107,18 @@ class BuildStats:
 # ---------------------------------------------------------------------------
 # Worker path
 # ---------------------------------------------------------------------------
-
-# Each worker holds one MediaPipe `Hands` instance for its lifetime. Building
-# `Hands` involves loading a TFLite model + graph init — ~200 ms. Doing that
-# per image would dominate wall-clock. `_MP_HANDS` is process-global inside
-# each worker; the main process never touches it.
-_MP_HANDS = None
-
-
-def _init_worker() -> None:
-    global _MP_HANDS
-    import mediapipe as mp  # type: ignore[import-not-found]
-
-    _MP_HANDS = mp.solutions.hands.Hands(
-        static_image_mode=True,
-        max_num_hands=1,
-        min_detection_confidence=0.5,
-    )
-
-
-def _extract_one(image_path_str: str) -> tuple[str, list[float] | None]:
-    """Worker task: (image_path) → (letter, preprocessed 42-float or None).
-
-    The task returns the letter alongside the vector so the main process can
-    partition results without a second directory walk.
-    """
-    import cv2  # type: ignore[import-not-found]
-
-    image_path = Path(image_path_str)
-    letter = image_path.parent.name
-    image = cv2.imread(image_path_str)
-    if image is None:
-        return (letter, None)
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    height, width = image_rgb.shape[:2]
-
-    assert _MP_HANDS is not None, "worker not initialized — call _init_worker first"
-    result = _MP_HANDS.process(image_rgb)
-    if not result.multi_hand_landmarks:
-        return (letter, None)
-    first = result.multi_hand_landmarks[0]
-    raw = [
-        [min(int(lm.x * width), width - 1), min(int(lm.y * height), height - 1)]
-        for lm in first.landmark
-    ]
-    if len(raw) != 21:
-        return (letter, None)
-    return (letter, pre_process_landmark(raw))
+#
+# Extraction workers live in `sayva_ml.data.mediapipe_workers` — a
+# language-neutral module in the installed `sayva_ml` package — because
+# `ProcessPoolExecutor.spawn` (Windows default) requires worker callables
+# to be reachable via a real Python import path in the child process. This
+# pack file is loaded dynamically by
+# `sayva_ml.packs.data_loader.load_pack_data_module`, so its
+# `_pack_ase_asl_alphabet` qualname exists only in the parent's sys.modules
+# and cannot be resolved by spawn'd children. Keeping the workers next
+# door in `sayva_ml/data/` sidesteps that entirely and stays available to
+# every future pack that wants to run the same MediaPipe-on-images
+# pipeline over its own dataset.
 
 
 # ---------------------------------------------------------------------------
@@ -255,8 +221,8 @@ def build_cache(  # noqa: PLR0913
 
     start = time.perf_counter()
     completed = 0
-    with ProcessPoolExecutor(max_workers=workers, initializer=_init_worker) as pool:
-        futures = [pool.submit(_extract_one, p) for p in image_paths]
+    with ProcessPoolExecutor(max_workers=workers, initializer=init_worker) as pool:
+        futures = [pool.submit(extract_one, p) for p in image_paths]
         for fut in as_completed(futures):
             letter, vec = fut.result()
             s = stats.per_class[letter]
