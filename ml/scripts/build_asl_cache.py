@@ -126,8 +126,17 @@ def main() -> int:
     )
     total = len(split.X_train) + len(split.X_val) + len(split.X_test)
     print()
-    print(f"wrote: {output.relative_to(_REPO_ROOT)}")
-    print(f"       {output.with_suffix(output.suffix + '.meta.json').relative_to(_REPO_ROOT)}")
+
+    def _display(p: Path) -> str:
+        # `relative_to` on a relative path throws; resolve first so callers
+        # can pass `--output packs/…` from `ml/` without the CLI crashing.
+        try:
+            return str(p.resolve().relative_to(_REPO_ROOT))
+        except ValueError:
+            return str(p)
+
+    print(f"wrote: {_display(output)}")
+    print(f"       {_display(output.with_suffix(output.suffix + '.meta.json'))}")
     print()
     print(f"totals: {total} samples "
           f"({len(split.X_train)} train / {len(split.X_val)} val / {len(split.X_test)} test)")
