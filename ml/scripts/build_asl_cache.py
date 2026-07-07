@@ -81,7 +81,7 @@ def main() -> int:
     parser.add_argument(
         "--min-hand-detection-confidence",
         type=float,
-        default=0.5,
+        default=0.3,
         help=(
             "MediaPipe HandLandmarker's accept threshold for a candidate hand. "
             "Lower catches more hands (with more false positives); higher is stricter. "

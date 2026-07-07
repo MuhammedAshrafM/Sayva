@@ -167,7 +167,7 @@ def build_cache(  # noqa: PLR0913
     val_ratio: float = 0.125,
     max_per_class: int | None = None,
     min_detection_rate: float = MIN_CLASS_DETECTION_RATE,
-    min_hand_detection_confidence: float = 0.5,
+    min_hand_detection_confidence: float = 0.3,
     seed: int = 42,
     progress: bool = True,
 ) -> RealDatasetSplit:

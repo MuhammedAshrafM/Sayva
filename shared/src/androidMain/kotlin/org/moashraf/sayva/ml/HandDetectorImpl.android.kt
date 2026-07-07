@@ -37,7 +37,13 @@ internal class HandDetectorImpl(private val maxHands: Int) : HandDetector {
             .setBaseOptions(baseOptions)
             .setRunningMode(RunningMode.IMAGE)
             .setNumHands(maxHands)
-            .setMinHandDetectionConfidence(0.5f)
+            // Detection threshold aligned with the Python training pipeline
+            // (see ml/src/sayva_ml/data/mediapipe_workers.py). A/B on the ASL
+            // Alphabet showed 0.3 uniformly beats 0.5 across all 24 classes
+            // with no regressions. Presence + tracking stay at 0.5 — those
+            // are inference-time continuity thresholds that don't affect
+            // train/serve parity for single-frame recognition.
+            .setMinHandDetectionConfidence(0.3f)
             .setMinHandPresenceConfidence(0.5f)
             .setMinTrackingConfidence(0.5f)
             .build()

@@ -43,7 +43,13 @@ DEFAULT_HAND_LANDMARKER_TASK = (
 _MP_HANDS: Any = None
 
 
-DEFAULT_MIN_HAND_DETECTION_CONFIDENCE = 0.5
+# A/B measured on the ASL Alphabet (see docs / commit history): every one of
+# the 24 classes gained +1.0 to +9.6 pp detection rate going from 0.5 → 0.3,
+# with M rescued from marginal (53.4% → 63.0%) and N advancing 42.5% → 49.0%.
+# Zero regressions; overall detection rose 76.9% → 79.6%. Adopted as the
+# default to keep train-time landmark extraction aligned with the Android
+# runtime, which now also uses 0.3 (see HandDetectorImpl.android.kt).
+DEFAULT_MIN_HAND_DETECTION_CONFIDENCE = 0.3
 
 
 def init_worker(
