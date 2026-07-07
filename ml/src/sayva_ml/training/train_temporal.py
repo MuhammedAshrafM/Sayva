@@ -325,7 +325,8 @@ def main() -> int:
     print(f"final: {metrics}")
 
     vocab_signs = [
-        {"index": i, "id": s.id, "label": s.label, "tags": list(s.tags)}
+        # See train_fingerspelling.py for the id-as-label rationale.
+        {"index": i, "id": s.id, "label": s.id, "tags": list(s.tags)}
         for i, s in enumerate(vocab.signs)
     ]
     out_dir = _write_artifacts(

@@ -330,8 +330,13 @@ def main() -> int:
     )
     print(f"final: {metrics}")
 
+    # `Sign` carries an `id` + `tags`; there's no separate `label` field.
+    # The id doubles as the human-readable label for the vocabularies we
+    # ship today (e.g. "A" through "Y" for fingerspelling, sign glosses
+    # for temporal). Emitting both keeps the artifact schema stable for
+    # readers that expected a `label` key, without inventing a new field.
     vocab_signs = [
-        {"index": i, "id": s.id, "label": s.label, "tags": list(s.tags)}
+        {"index": i, "id": s.id, "label": s.id, "tags": list(s.tags)}
         for i, s in enumerate(vocab.signs)
     ]
     out_dir = _write_artifacts(model, metrics, args, vocab_signs, args.version)
