@@ -1,13 +1,16 @@
 package org.moashraf.sayva.camera
 
 import android.util.Log
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.TorchState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,6 +19,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -76,6 +81,25 @@ internal class CameraControllerImpl : CameraController {
 
     private val _lens = MutableStateFlow(CameraLens.Front)
     override val lens: CameraLens get() = _lens.value
+
+    // Torch state — updated from CameraX's LiveData whenever the platform
+    // reports a change (user tap, battery override, or successful setTorch
+    // call). Stays `false` when no camera is bound OR the current camera
+    // has no flash unit; readers never need to distinguish the two.
+    private val _torchEnabled = MutableStateFlow(false)
+    override val torchEnabled: StateFlow<Boolean> = _torchEnabled.asStateFlow()
+
+    // Cached from the bound Camera's cameraInfo. Front cameras generally
+    // return false; back cameras generally true. We rebind on switchLens
+    // so this stays current.
+    @Volatile private var _hasTorch: Boolean = false
+    override val hasTorch: Boolean get() = _hasTorch
+
+    // Handle to the current CameraX Camera — needed for cameraControl
+    // (torch, zoom, focus). Cleared in stop() so we don't leak a
+    // reference across a permission or lens rebind cycle.
+    private var boundCamera: Camera? = null
+    private var torchStateObserver: Observer<Int>? = null
 
     // PreviewView is cached so start() can pull the same instance across
     // suspensions. Created lazily by `bindPreviewView()` from the Compose side.
@@ -138,25 +162,75 @@ internal class CameraControllerImpl : CameraController {
             CameraLens.Back -> CameraSelector.DEFAULT_BACK_CAMERA
         }
 
-        withContext(Dispatchers.Main) {
+        val camera: Camera = withContext(Dispatchers.Main) {
             provider.unbindAll()
+            detachTorchObserver()
             provider.bindToLifecycle(activity, selector, preview, analysis)
         }
 
         previewUseCase = preview
         analysisUseCase = analysis
+        boundCamera = camera
+        _hasTorch = camera.cameraInfo.hasFlashUnit()
+        // Reflect the platform's real torch state — includes automatic
+        // off when a lens without a flash gets bound. Observing avoids
+        // us guessing after a rebind.
+        withContext(Dispatchers.Main) {
+            val observer = Observer<Int> { state ->
+                _torchEnabled.value = state == TorchState.ON
+            }
+            camera.cameraInfo.torchState.observeForever(observer)
+            torchStateObserver = observer
+        }
     }
 
     override suspend fun stop() {
         withContext(Dispatchers.Main) {
+            detachTorchObserver()
             cameraProvider?.unbindAll()
         }
         previewUseCase = null
         analysisUseCase = null
+        boundCamera = null
+        _hasTorch = false
+        _torchEnabled.value = false
         // Note: analysisExecutor + flowScope live for the CameraController's
         // lifetime (Koin single). We do NOT shut down here so a subsequent
         // start() can rebind cleanly. When Koin one day supports scoped
         // singletons for this VM, tear them down in a proper close() hook.
+    }
+
+    private fun detachTorchObserver() {
+        val observer = torchStateObserver ?: return
+        boundCamera?.cameraInfo?.torchState?.removeObserver(observer)
+        torchStateObserver = null
+    }
+
+    override suspend fun setTorchEnabled(enabled: Boolean) {
+        val camera = boundCamera ?: return
+        if (!camera.cameraInfo.hasFlashUnit()) return
+        withContext(Dispatchers.Main) {
+            // enableTorch returns a ListenableFuture — awaiting it here
+            // lets the caller know when the platform has applied it.
+            // We don't propagate the future's value because torchState
+            // LiveData is the source of truth for readers.
+            awaitFuture(camera.cameraControl.enableTorch(enabled))
+        }
+    }
+
+    private suspend fun <T> awaitFuture(
+        future: com.google.common.util.concurrent.ListenableFuture<T>,
+    ): T = suspendCancellableCoroutine { cont ->
+        future.addListener(
+            {
+                try {
+                    cont.resume(future.get())
+                } catch (t: Throwable) {
+                    cont.resumeWith(Result.failure(t))
+                }
+            },
+            ContextCompat.getMainExecutor(AndroidAppContext.require()),
+        )
     }
 
     override suspend fun switchLens(lens: CameraLens) {

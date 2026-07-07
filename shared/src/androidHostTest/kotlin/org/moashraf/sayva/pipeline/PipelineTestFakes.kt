@@ -72,6 +72,14 @@ class FakeCameraController(
     override val lens: CameraLens
         get() = _lens
 
+    // Torch surface — kept as toggleable state so pipeline tests that need to
+    // simulate a torch-having camera can set `_hasTorch = true` before start.
+    var _hasTorch: Boolean = false
+    override val hasTorch: Boolean get() = _hasTorch
+    private val _torchEnabled = kotlinx.coroutines.flow.MutableStateFlow(false)
+    override val torchEnabled: kotlinx.coroutines.flow.StateFlow<Boolean>
+        get() = _torchEnabled
+
     override suspend fun start() {
         startCount++
         startThrows?.let {
@@ -86,6 +94,11 @@ class FakeCameraController(
 
     override suspend fun switchLens(lens: CameraLens) {
         _lens = lens
+    }
+
+    override suspend fun setTorchEnabled(enabled: Boolean) {
+        if (!_hasTorch) return
+        _torchEnabled.value = enabled
     }
 
     /** Push a synthetic frame downstream — pipeline collects and processes. */

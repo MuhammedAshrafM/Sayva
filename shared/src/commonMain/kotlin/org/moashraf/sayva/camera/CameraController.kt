@@ -1,6 +1,7 @@
 package org.moashraf.sayva.camera
 
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Cross-platform camera abstraction — the port through which the recognition
@@ -38,6 +39,32 @@ interface CameraController {
 
     /** Which camera is currently active. */
     val lens: CameraLens
+
+    /**
+     * Whether the currently-bound camera has a torch (flash) unit. Front
+     * cameras typically don't; back cameras usually do — but the app never
+     * hardcodes that assumption. UI reads this to decide whether to render
+     * the torch button at all.
+     *
+     * Returns `false` when the controller isn't bound yet.
+     */
+    val hasTorch: Boolean
+
+    /**
+     * Observable torch state. Emits `true` when the torch is currently on,
+     * `false` otherwise (including when no torch exists). UI binds a switch
+     * to this flow so external changes (e.g. platform revoking the torch
+     * when battery is critically low) reflect back.
+     */
+    val torchEnabled: StateFlow<Boolean>
+
+    /**
+     * Turn the torch on or off. No-op if [hasTorch] is `false` — the caller
+     * doesn't have to check first. Suspends until the platform has applied
+     * the request or determined it's unsupported; throws if the platform
+     * returns an error.
+     */
+    suspend fun setTorchEnabled(enabled: Boolean)
 }
 
 enum class CameraLens { Front, Back }
