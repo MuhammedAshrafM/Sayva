@@ -254,6 +254,9 @@ val sayvaModule = module {
             permissionController = get(),
             analytics = get(),
             crashReporter = get(),
+            favorites = get(),
+            settings = get(),
+            clipboard = get(),
         )
     }
 }

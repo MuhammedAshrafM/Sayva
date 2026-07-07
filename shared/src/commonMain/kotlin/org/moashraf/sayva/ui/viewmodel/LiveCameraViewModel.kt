@@ -3,12 +3,20 @@ package org.moashraf.sayva.ui.viewmodel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.moashraf.sayva.camera.CameraController
+import org.moashraf.sayva.camera.CameraLens
+import org.moashraf.sayva.clipboard.Clipboard
+import org.moashraf.sayva.data.repository.FavoritesRepository
+import org.moashraf.sayva.data.repository.SettingsRepository
 import org.moashraf.sayva.languagepack.LanguagePackController
 import org.moashraf.sayva.languagepack.RecognitionRole
 import org.moashraf.sayva.languagepack.SignRecognizerFactory
@@ -33,7 +41,7 @@ import org.moashraf.sayva.telemetry.CrashReporter
  * without re-instantiating.
  */
 class LiveCameraViewModel(
-    camera: CameraController,
+    private val camera: CameraController,
     handDetectorFactory: HandDetectorFactory,
     signRecognizerFactory: SignRecognizerFactory,
     translationRenderer: TranslationRenderer,
@@ -41,6 +49,9 @@ class LiveCameraViewModel(
     private val permissionController: PermissionController,
     private val analytics: AnalyticsGateway,
     private val crashReporter: CrashReporter,
+    private val favorites: FavoritesRepository,
+    private val settings: SettingsRepository,
+    private val clipboard: Clipboard,
 ) {
 
     private val scope: CoroutineScope = MainScope()
@@ -182,4 +193,163 @@ class LiveCameraViewModel(
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Derived state — exposes CameraController / SettingsRepository /
+    // FavoritesRepository views the LiveCameraScreen needs to render. The UI
+    // is language- and model-agnostic because everything below reads from
+    // pack/state, never from a hardcoded language name or model id.
+    // -----------------------------------------------------------------------
+
+    /** True while the currently bound camera has a torch (flash) unit. */
+    val hasTorch: Boolean get() = camera.hasTorch
+
+    /** Observable torch state — reflects platform overrides too. */
+    val torchEnabled: StateFlow<Boolean> get() = camera.torchEnabled
+
+    /** Which lens is currently active. Read on demand by the switch button. */
+    val currentLens: CameraLens get() = camera.lens
+
+    /** Developer HUD gate — off by default; toggle lives in Settings > Diagnostics. */
+    val developerMode: StateFlow<Boolean> = settings.state
+        .map { it.developerMode }
+        .stateIn(scope, SharingStarted.Eagerly, initialValue = settings.state.value.developerMode)
+
+    /**
+     * Pack chip label — the currently active recognition pack's display name
+     * in the currently active output language. Falls back to the pack's own
+     * default output when the pack subsystem is still loading. Language-
+     * neutral: whatever the pack's manifest advertises shows here.
+     */
+    val packDisplayName: StateFlow<String> = packController.state
+        .map { s ->
+            when (s) {
+                is LanguagePackController.State.Ready ->
+                    s.currentPack.displayName(s.outputLanguage)
+                LanguagePackController.State.Loading -> "…"
+                is LanguagePackController.State.Error -> "—"
+            }
+        }
+        .stateIn(scope, SharingStarted.Eagerly, initialValue = "…")
+
+    /**
+     * True when the pipeline's current prediction (Recognizing OR Paused
+     * with a last-known snapshot) is already a saved favorite. Derived
+     * from the live favorites list so external mutations (delete from the
+     * Favorites screen, etc.) reflect back here without polling.
+     */
+    val isFavorited: StateFlow<Boolean> = combine(
+        _viewState,
+        favorites.observeAll(),
+    ) { state, favs ->
+        val (packCode, signId) = state.currentSignIdentity() ?: return@combine false
+        val expected = favorites.favoriteIdForSign(packCode, signId)
+        favs.any { it.id == expected }
+    }.stateIn(scope, SharingStarted.Eagerly, initialValue = false)
+
+    /**
+     * Pull the `(packCode, signId)` pair off any state that carries a
+     * prediction. Returns `null` for states where the concept doesn't apply
+     * (Idle, Starting, permission-required, NoModelForMode, Error, or a
+     * Recognizing/Paused whose prediction is null because no hand was in
+     * frame).
+     */
+    private fun RecognitionUiState.currentSignIdentity(): Pair<String, String>? = when (this) {
+        is RecognitionUiState.Recognizing -> prediction?.sign?.id?.let { packCode to it }
+        is RecognitionUiState.Paused -> prediction?.sign?.id?.let { packCode to it }
+        else -> null
+    }
+
+    // -----------------------------------------------------------------------
+    // Actions — every button on LiveCameraScreen routes through here so the
+    // Compose layer stays free of platform + persistence knowledge.
+    // -----------------------------------------------------------------------
+
+    /**
+     * Pause the pipeline if recognizing, resume it if paused. Any other
+     * state (Idle, Starting, Error, NoModelForMode, PermissionRequired) is
+     * a no-op — the button is disabled in those states in the UI.
+     */
+    fun togglePause() {
+        scope.launch {
+            when (state.value) {
+                is RecognitionUiState.Recognizing -> {
+                    pipeline.pause()
+                    analytics.logEvent(AnalyticsEvents.RECOGNITION_PAUSED)
+                    crashReporter.setKey("recognition_paused", "true")
+                }
+                is RecognitionUiState.Paused -> {
+                    pipeline.resume()
+                    analytics.logEvent(AnalyticsEvents.RECOGNITION_RESUMED)
+                    crashReporter.setKey("recognition_paused", "false")
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    /** Flip the torch on/off. No-op when the current camera has no flash unit. */
+    fun toggleTorch() {
+        if (!camera.hasTorch) return
+        val next = !camera.torchEnabled.value
+        scope.launch {
+            camera.setTorchEnabled(next)
+            analytics.logEvent(
+                AnalyticsEvents.CAMERA_TORCH_TOGGLED,
+                mapOf(AnalyticsEvents.Param.ENABLED to next),
+            )
+        }
+    }
+
+    /** Swap between the front and back cameras. Preserves the current session. */
+    fun switchLens() {
+        scope.launch {
+            val next = if (camera.lens == CameraLens.Front) CameraLens.Back else CameraLens.Front
+            camera.switchLens(next)
+            analytics.logEvent(
+                AnalyticsEvents.CAMERA_LENS_SWITCHED,
+                mapOf(AnalyticsEvents.Param.LENS to next.name.lowercase()),
+            )
+        }
+    }
+
+    /**
+     * Toggle the "favorite" state for the sign currently on the translation
+     * card. No-op when there's no prediction. Consumes only ViewModel-side
+     * data — the FavoritesRepository owns persistence.
+     */
+    fun toggleFavorite() {
+        val current = state.value
+        val (packCode, signId) = current.currentSignIdentity() ?: return
+        val label = when (current) {
+            is RecognitionUiState.Recognizing -> current.prediction?.label
+            is RecognitionUiState.Paused -> current.prediction?.label
+            else -> null
+        } ?: return
+        scope.launch {
+            val nowFavorited = favorites.toggleFavoriteFromSign(packCode, signId, label)
+            analytics.logEvent(
+                AnalyticsEvents.RECOGNITION_FAVORITE_TOGGLED,
+                mapOf(
+                    AnalyticsEvents.Param.PACK_CODE to packCode,
+                    AnalyticsEvents.Param.SIGN_ID to signId,
+                    AnalyticsEvents.Param.ENABLED to nowFavorited,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Copy the current prediction's label to the platform clipboard. No-op
+     * when there's no prediction to copy (state is not Recognizing/Paused
+     * or the last prediction was null).
+     */
+    fun copyLabel() {
+        val label = when (val current = state.value) {
+            is RecognitionUiState.Recognizing -> current.prediction?.label
+            is RecognitionUiState.Paused -> current.prediction?.label
+            else -> null
+        } ?: return
+        clipboard.copyText(label, label = "Sayva")
+        analytics.logEvent(AnalyticsEvents.RECOGNITION_LABEL_COPIED)
+    }
 }

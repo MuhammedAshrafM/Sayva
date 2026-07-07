@@ -62,6 +62,24 @@ object AnalyticsEvents {
     /** User switched between recognition modes (fingerspelling / sign_recognition / …). */
     const val RECOGNITION_MODE_CHANGED = "recognition_mode_changed"
 
+    /** User paused live recognition — camera stays bound; frame processing suspended. */
+    const val RECOGNITION_PAUSED = "recognition_paused"
+
+    /** User resumed from a paused live recognition session. */
+    const val RECOGNITION_RESUMED = "recognition_resumed"
+
+    /** User tapped the torch button. `enabled` boolean records the resulting state. */
+    const val CAMERA_TORCH_TOGGLED = "camera_torch_toggled"
+
+    /** User swapped between front and back cameras. */
+    const val CAMERA_LENS_SWITCHED = "camera_lens_switched"
+
+    /** User tapped Copy on the translation card. */
+    const val RECOGNITION_LABEL_COPIED = "recognition_label_copied"
+
+    /** User tapped the star to add / remove a live-recognition favorite. */
+    const val RECOGNITION_FAVORITE_TOGGLED = "recognition_favorite_toggled"
+
     // ---- Crash reporting ---------------------------------------------------
 
     /** User tapped "Send report" on the CrashReportScreen. */
@@ -111,6 +129,15 @@ object AnalyticsEvents {
 
         /** Language pack recognition code, e.g. `"ase"`. */
         const val PACK_CODE = "pack_code"
+
+        /** For torch / favorite / lens events — the resulting boolean state. */
+        const val ENABLED = "enabled"
+
+        /** For lens_switched — "front" or "back". */
+        const val LENS = "lens"
+
+        /** For favorite toggle — sign id within the active pack, e.g. "A" or "hello". */
+        const val SIGN_ID = "sign_id"
 
         /** For crash_report_submitted. Booleans mirror the on-screen toggles. */
         const val INCLUDES_LOGS = "includes_logs"
