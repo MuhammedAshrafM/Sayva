@@ -238,6 +238,24 @@ def build_cache(  # noqa: PLR0913
 
     stats.total_seconds = time.perf_counter() - start
 
+    # Always dump per-class stats, even when the QA gate below raises.
+    # A failing run's per-class rates are exactly what a controlled
+    # detector-config comparison needs — waiting for the gate to pass
+    # to see them would mean throwing away 17+ minutes of extraction.
+    stats_path = cache_path.with_suffix(cache_path.suffix + ".stats.json")
+    stats_path.parent.mkdir(parents=True, exist_ok=True)
+    stats_path.write_text(
+        json.dumps(
+            {
+                "dataset_dir": str(dataset_dir),
+                "min_detection_rate_threshold": min_detection_rate,
+                "build": stats.to_json_dict(),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
     # Quality gate — refuse to write a lopsided dataset.
     weak_classes = [
         (letter, s)
@@ -251,6 +269,7 @@ def build_cache(  # noqa: PLR0913
         raise RuntimeError(
             f"Detection rate below {min_detection_rate * 100:.0f}% for: {details}. "
             "Training on this data would produce a biased model. "
+            f"Full per-class stats at {stats_path}. "
             "Either widen `min_detection_rate` (with eyes open) or collect more data."
         )
 
