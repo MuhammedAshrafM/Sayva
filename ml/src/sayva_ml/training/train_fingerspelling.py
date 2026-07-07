@@ -91,7 +91,12 @@ def _load_data(source: str, num_classes: int, samples_per_class: int, seed: int)
         # dynamically via importlib so `sayva_ml/` stays language-neutral.
         asl_module = load_pack_data_module(DEFAULT_PACKS_ROOT / "ase", "asl_alphabet")
 
-        cache = _CACHE_ROOT / "asl_alphabet.npz"
+        # Read the cache from the pack tree — matches where
+        # `build_asl_cache.py` writes it. The legacy `ml/models/cache/` path
+        # was a shared holdover from before pack-owned data trees; the
+        # workflow doc (docs/PACKS_WORKFLOW.md) makes per-pack ownership the
+        # rule.
+        cache = DEFAULT_PACKS_ROOT / "ase" / "data" / "cache" / "asl_alphabet.npz"
         if not cache.exists():
             raise SystemExit(
                 f"ASL Alphabet cache not found at {cache}. Build it first with:\n"
