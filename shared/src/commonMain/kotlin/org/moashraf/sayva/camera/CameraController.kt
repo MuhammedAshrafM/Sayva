@@ -91,4 +91,20 @@ data class CameraFrame(
     val rotationDegrees: Int,
     val timestampNanos: Long,
     val platformFrame: Any,
+    /**
+     * True when the sensor image would appear horizontally mirrored to a
+     * viewer of the frame. Front cameras on Android + iOS deliver a raw
+     * un-mirrored sensor image via `ImageAnalysis` / `AVCaptureVideoDataOutput`
+     * even though their preview surfaces show a mirrored view for the user —
+     * so the "user's right hand" ends up on the LEFT of the frame the
+     * detector sees.
+     *
+     * The training data (Kaggle ASL Alphabet) was captured un-mirrored;
+     * feeding a mirrored frame's landmarks straight through would flip
+     * every letter's x components vs training and collapse recognition
+     * onto the most symmetric class. Setting this to `true` for
+     * front-camera capture lets the detector apply a horizontal flip
+     * (`x = widthPx - x`) so the landmark geometry matches training.
+     */
+    val isMirrored: Boolean = false,
 )
