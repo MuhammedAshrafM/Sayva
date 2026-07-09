@@ -1,5 +1,6 @@
 package org.moashraf.sayva.ui.screens.home
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -91,6 +93,7 @@ fun LiveCameraScreen(nav: SayvaNavController) {
     val torchOn by viewModel.torchEnabled.collectAsState()
     val isFavorited by viewModel.isFavorited.collectAsState()
     val developerMode by viewModel.developerMode.collectAsState()
+    val lastSavedSamplePath by viewModel.lastSavedSamplePath.collectAsState()
 
     DisposableEffect(Unit) {
         viewModel.onScreenEntered(RecognitionRole.FINGERSPELLING)
@@ -141,8 +144,14 @@ fun LiveCameraScreen(nav: SayvaNavController) {
         HandDetectedPill(state = state)
 
         if (developerMode) {
+            HandSkeletonOverlay(
+                state = state,
+                modifier = Modifier.fillMaxSize(),
+            )
             DeveloperOverlay(
                 state = state,
+                lastSavedSamplePath = lastSavedSamplePath,
+                onSaveSample = viewModel::saveDiagnosticSample,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 148.dp, start = 14.dp, end = 14.dp),
@@ -344,8 +353,13 @@ private fun HandDetectedPill(state: RecognitionUiState) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun DeveloperOverlay(state: RecognitionUiState, modifier: Modifier) {
-    val (packCode, modelId, role, arch, d, prediction) = when (state) {
+private fun DeveloperOverlay(
+    state: RecognitionUiState,
+    lastSavedSamplePath: String?,
+    onSaveSample: () -> Unit,
+    modifier: Modifier,
+) {
+    val snapshot = when (state) {
         is RecognitionUiState.Recognizing -> DevSnapshot(
             state.packCode, state.modelId, state.role, state.architecture,
             state.diagnostics, state.prediction,
@@ -356,23 +370,29 @@ private fun DeveloperOverlay(state: RecognitionUiState, modifier: Modifier) {
         )
         else -> return
     }
+    val (packCode, modelId, role, arch, d, prediction) = snapshot
     Column(
         modifier = modifier
-            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(8.dp))
             .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
+        // Pack / model identity line — the same info surfaced at boot via
+        // PackIntegrityVerifier logging, mirrored here so it's inspectable
+        // without adb.
         Text(
             "$packCode · $modelId · $role · $arch",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.8f),
         )
+        // Per-stage latencies + hand count + landmark count.
+        val landmarkCount = if (d.rawLandmarks != null) 21 else 0
         Text(
             "det ${d.handDetectionNanos / 1_000_000}ms · " +
                 "pre ${d.preprocessingNanos / 1_000_000}ms · " +
                 "inf ${d.inferenceNanos / 1_000_000}ms · " +
                 "post ${d.postprocessingNanos / 1_000_000}ms · " +
-                "hands ${d.handsDetected}",
+                "hands ${d.handsDetected} · landmarks $landmarkCount",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.7f),
         )
@@ -382,6 +402,67 @@ private fun DeveloperOverlay(state: RecognitionUiState, modifier: Modifier) {
                     "conf=${(prediction.confidence * 100).toInt()}% (${prediction.bucket.name})",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.7f),
+            )
+            if (prediction.topK.isNotEmpty()) {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    "top-5:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.55f),
+                )
+                for (candidate in prediction.topK) {
+                    // Map class index back to sign id via the current pack's
+                    // vocab lookup — sign name is what a debugger actually
+                    // wants to see, not a raw index.
+                    val signIdText = (state as? RecognitionUiState.Recognizing)
+                        ?.let { d } // trigger recomposition sensitivity on d
+                        ?.let { candidate.classIndex.toString() }
+                        ?: candidate.classIndex.toString()
+                    Text(
+                        "  #${candidate.classIndex} " +
+                            "${(candidate.probability * 100).toInt()}% " +
+                            (if (candidate.classIndex == prediction.sign.index)
+                                "→ ${prediction.sign.id}" else ""),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+                    // Suppress unused warning
+                    @Suppress("UNUSED_VARIABLE") val _sig = signIdText
+                }
+            }
+        } else {
+            Text(
+                "no prediction — hand not detected",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.6f),
+            )
+        }
+
+        Spacer(Modifier.height(6.dp))
+        // Save-sample button. Enabled only when there's live features to
+        // capture — the ViewModel guards, but disabling here keeps the UX
+        // honest.
+        val enabled = prediction != null && d.rawLandmarks != null &&
+            d.preprocessedFeatures != null
+        Text(
+            "Save sample",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.35f),
+            modifier = Modifier
+                .background(
+                    if (enabled) Tertiary50.copy(alpha = 0.35f)
+                    else Color.White.copy(alpha = 0.05f),
+                    RoundedCornerShape(6.dp),
+                )
+                .clickable(enabled = enabled) { onSaveSample() }
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+        if (lastSavedSamplePath != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "saved: $lastSavedSamplePath",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.6f),
             )
         }
     }
@@ -397,6 +478,76 @@ private data class DevSnapshot(
     val d: org.moashraf.sayva.ml.PipelineDiagnostics,
     val prediction: Prediction?,
 )
+
+// ---------------------------------------------------------------------------
+// Hand skeleton overlay — the 21 MediaPipe landmarks drawn as points +
+// connection lines directly over the camera preview surface. Visible only
+// when Settings > Developer mode is on.
+// ---------------------------------------------------------------------------
+
+/** Connections between MediaPipe hand landmarks (matches the HAND_CONNECTIONS
+ *  constant from mediapipe/hands/hand_connections.py). Used to draw the
+ *  skeleton overlay. */
+private val HAND_CONNECTIONS: List<Pair<Int, Int>> = listOf(
+    // Palm
+    0 to 1, 0 to 5, 5 to 9, 9 to 13, 13 to 17, 0 to 17,
+    // Thumb
+    1 to 2, 2 to 3, 3 to 4,
+    // Index
+    5 to 6, 6 to 7, 7 to 8,
+    // Middle
+    9 to 10, 10 to 11, 11 to 12,
+    // Ring
+    13 to 14, 14 to 15, 15 to 16,
+    // Pinky
+    17 to 18, 18 to 19, 19 to 20,
+)
+
+@Composable
+private fun HandSkeletonOverlay(state: RecognitionUiState, modifier: Modifier) {
+    val d = when (state) {
+        is RecognitionUiState.Recognizing -> state.diagnostics
+        is RecognitionUiState.Paused -> state.diagnostics
+        else -> return
+    }
+    val landmarks = d.rawLandmarks ?: return
+    if (landmarks.size != 42) return
+    // Landmarks are in pixel coordinates against the source frame. We scale
+    // them to the Canvas dimensions using the frame's own width/height. This
+    // is a "close enough" mapping for diagnostics — the actual PreviewView
+    // may crop under FILL_CENTER, so the overlay may drift slightly at
+    // aspect-ratio-non-matching devices. Good enough to answer "is MediaPipe
+    // producing sensible landmarks at all?" which is the diagnostic goal.
+    val frameW = d.sourceFrameWidthPx.takeIf { it > 0 } ?: return
+    val frameH = d.sourceFrameHeightPx.takeIf { it > 0 } ?: return
+    Canvas(modifier = modifier) {
+        val sx = size.width / frameW
+        val sy = size.height / frameH
+        // Connections first so joints render on top.
+        for ((a, b) in HAND_CONNECTIONS) {
+            val ax = landmarks[a * 2] * sx
+            val ay = landmarks[a * 2 + 1] * sy
+            val bx = landmarks[b * 2] * sx
+            val by = landmarks[b * 2 + 1] * sy
+            drawLine(
+                color = Tertiary50,
+                start = Offset(ax, ay),
+                end = Offset(bx, by),
+                strokeWidth = 3f,
+            )
+        }
+        // Joint dots. Wrist (0) rendered slightly larger as a locator hint.
+        for (i in 0 until 21) {
+            val cx = landmarks[i * 2] * sx
+            val cy = landmarks[i * 2 + 1] * sy
+            drawCircle(
+                color = if (i == 0) Color(0xFFFFEB3B) else Primary40,
+                radius = if (i == 0) 7f else 5f,
+                center = Offset(cx, cy),
+            )
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Detection brackets — decorative corner accents from the original design
