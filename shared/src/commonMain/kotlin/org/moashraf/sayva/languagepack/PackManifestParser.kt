@@ -193,6 +193,14 @@ object PackManifestParser {
             "model '$id' declares $outClasses output classes but vocabulary has ${vocab.size} signs"
         }
 
+        val integrity = obj["integrity"]?.jsonObject?.let { integ ->
+            val sha = integ["sha256"]?.jsonPrimitive?.contentOrNull
+                ?: error("model '$id' integrity block missing 'sha256'")
+            val size = integ["sizeBytes"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+                ?: error("model '$id' integrity block missing 'sizeBytes'")
+            ModelIntegrity(sha256 = sha, sizeBytes = size)
+        }
+
         return PackModel(
             id = id,
             role = role,
@@ -204,6 +212,7 @@ object PackManifestParser {
             output = output,
             confidenceThresholds = thresholds,
             vocabulary = vocab,
+            integrity = integrity,
         )
     }
 

@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.moashraf.sayva.data.repository.SettingsRepository
+import org.moashraf.sayva.telemetry.CrashReporter
 
 /**
  * Top-level state manager for language-pack selection.
@@ -37,6 +38,15 @@ class LanguagePackController(
     private val registry: LanguagePackRegistry,
     private val settings: SettingsRepository,
     private val mvpDefaultRecognitionCode: String = MVP_DEFAULT_RECOGNITION_CODE,
+    /**
+     * Optional pack-file loader used for integrity verification at
+     * bootstrap. When non-null, each pack's model bytes are hashed and
+     * compared to the manifest's declared SHA-256; results land in
+     * Logcat + Crashlytics breadcrumbs. Left `null` in tests that don't
+     * exercise the resource layer.
+     */
+    private val loader: PackResourceLoader? = null,
+    private val crashReporter: CrashReporter? = null,
 ) {
 
     sealed class State {
@@ -88,6 +98,17 @@ class LanguagePackController(
                 return
             }
 
+            // Diagnostic: hash bundled model bytes + compare to the
+            // manifest's integrity block. This lets a device / Crashlytics
+            // log answer "is the app loading the model the pack expected
+            // to ship" without an APK teardown.
+            if (loader != null) {
+                for (pack in packs) {
+                    val report = PackIntegrityVerifier.verify(pack, loader)
+                    logPackIntegrityReport(report)
+                }
+            }
+
             val storedCode = settings.state.value.recognitionLanguageCode
             val activePack = pickInitialPack(packs, storedCode)
             val activeOutput = pickInitialOutput(activePack, settings.state.value.outputLanguageCode)
@@ -100,6 +121,54 @@ class LanguagePackController(
         } catch (e: Throwable) {
             _state.value = State.Error(e)
         }
+    }
+
+    private fun logPackIntegrityReport(report: PackIntegrityReport) {
+        // Header — always logged.
+        val header = "[pack-integrity] pack=${report.packCode} " +
+            "version=${report.packVersion} " +
+            "minAppVersion=${report.minAppVersion} " +
+            "schemaVersion=${report.schemaVersion}"
+        emit(header)
+
+        for (r in report.results) when (r) {
+            is ModelIntegrityResult.Checked -> {
+                val status = if (r.match) "OK" else "MISMATCH"
+                emit(
+                    "[pack-integrity]   [$status] model=${r.modelId} " +
+                        "file=${r.modelFile} " +
+                        "size=${r.actualSizeBytes}(declared=${r.declaredSizeBytes}) " +
+                        "sha=${r.actualSha256.take(16)}…" +
+                        "(declared=${r.declaredSha256.take(16)}…)"
+                )
+                if (!r.match) {
+                    emit(
+                        "[pack-integrity]   FULL DECLARED sha=${r.declaredSha256} " +
+                            "size=${r.declaredSizeBytes}"
+                    )
+                    emit(
+                        "[pack-integrity]   FULL ACTUAL   sha=${r.actualSha256} " +
+                            "size=${r.actualSizeBytes}"
+                    )
+                }
+            }
+            is ModelIntegrityResult.Skipped -> emit(
+                "[pack-integrity]   [SKIP] model=${r.modelId} " +
+                    "file=${r.modelFile} reason=${r.reason}"
+            )
+            is ModelIntegrityResult.ReadError -> emit(
+                "[pack-integrity]   [READ-ERROR] model=${r.modelId} " +
+                    "file=${r.modelFile} cause=${r.cause.message ?: r.cause::class.simpleName}"
+            )
+        }
+    }
+
+    /** Route both to Logcat/stdout (visible in `adb logcat -s System.out`)
+     *  and to Crashlytics breadcrumbs so a post-hoc crash carries the pack
+     *  identity that was live at the time. */
+    private fun emit(line: String) {
+        println(line)
+        crashReporter?.log(line)
     }
 
     /**

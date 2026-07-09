@@ -196,7 +196,14 @@ val sayvaModule = module {
             postprocessorRegistry = get(),
         )
     }
-    single { LanguagePackController(registry = get(), settings = get()) }
+    single {
+        LanguagePackController(
+            registry = get(),
+            settings = get(),
+            loader = get(),
+            crashReporter = get(),
+        )
+    }
 
     // ---- Camera + Hand Detection --------------------------------------------
     // Both are per-platform. CameraControllerProvider / HandDetectorProvider

@@ -107,11 +107,30 @@ data class PackModel(
     val output: ModelOutputSpec,
     val confidenceThresholds: ConfidenceThresholds,
     val vocabulary: SignVocabulary,
+    /**
+     * SHA-256 + size the generator recorded for the exact bytes of
+     * [modelFile] in the distributed pack. Populated by every pack the
+     * current `generate_pack.py` produces; older/downloaded manifests
+     * without the block leave this `null`.
+     *
+     * The runtime verifies bundled bytes against this on load (see
+     * [org.moashraf.sayva.languagepack.PackIntegrityVerifier]) so a
+     * mismatch surfaces as a diagnosable log line rather than silently
+     * running the wrong model.
+     */
+    val integrity: ModelIntegrity? = null,
 ) {
     /** Tail-product of the input shape (drop batch dim). Handy for buffer sizing. */
     val expectedInputElements: Int
         get() = input.shape.drop(1).fold(1) { acc, d -> acc * d }
 }
+
+/** SHA-256 + size of a model file as declared in the distributed manifest.
+ *  Both are populated by `ml/scripts/generate_pack.py` at pack build time. */
+data class ModelIntegrity(
+    val sha256: String,
+    val sizeBytes: Long,
+)
 
 data class ModelInputSpec(
     val shape: List<Int>,
