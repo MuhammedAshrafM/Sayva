@@ -145,11 +145,6 @@ internal class CameraControllerImpl : CameraController {
                         rotationDegrees = proxy.imageInfo.rotationDegrees,
                         timestampNanos = proxy.imageInfo.timestamp,
                         platformFrame = proxy,
-                        // ImageAnalysis delivers the RAW sensor image; PreviewView
-                        // handles its own mirroring for display. So the frame
-                        // detector sees is only "mirrored" (from the user's POV)
-                        // when the front camera is bound.
-                        isMirrored = _lens.value == CameraLens.Front,
                     )
                     // Every code path that fails to hand the frame to the
                     // pipeline closes the proxy here — `Channel.trySend`

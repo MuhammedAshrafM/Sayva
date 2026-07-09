@@ -87,20 +87,10 @@ internal class HandDetectorImpl(private val maxHands: Int) : HandDetector {
             if (lm.size != 21) continue
             val flat = FloatArray(42)
             for (j in 0 until 21) {
-                // Un-mirror the front-camera raw sensor image at landmark
-                // level. The Kaggle ASL Alphabet training data is un-mirrored
-                // ("hand as photographed"); front-camera ImageAnalysis output
-                // has user's right hand on the LEFT of the frame. Flipping
-                // x = widthPx - x here restores training-side orientation
-                // without a bitmap copy. Handedness label from MediaPipe is
-                // reported against the same (un-flipped) sensor image, so
-                // we invert it too when mirrored — the un-mirrored geometry
-                // now matches a Left/Right label of the same sense.
-                val rawX = lm[j].x() * frame.widthPx
-                flat[j * 2] = if (frame.isMirrored) frame.widthPx - rawX else rawX
+                flat[j * 2] = lm[j].x() * frame.widthPx
                 flat[j * 2 + 1] = lm[j].y() * frame.heightPx
             }
-            val reportedHandedness = handednessLists.getOrNull(i)
+            val handedness = handednessLists.getOrNull(i)
                 ?.firstOrNull()?.categoryName()?.let {
                     when (it) {
                         "Left" -> Handedness.Left
@@ -108,15 +98,6 @@ internal class HandDetectorImpl(private val maxHands: Int) : HandDetector {
                         else -> Handedness.Unknown
                     }
                 } ?: Handedness.Unknown
-            val handedness = if (frame.isMirrored) {
-                when (reportedHandedness) {
-                    Handedness.Left -> Handedness.Right
-                    Handedness.Right -> Handedness.Left
-                    Handedness.Unknown -> Handedness.Unknown
-                }
-            } else {
-                reportedHandedness
-            }
             hands.add(HandLandmarks(handedness = handedness, landmarks = flat))
         }
         return HandDetection(hands = hands, processingNanos = elapsed)
