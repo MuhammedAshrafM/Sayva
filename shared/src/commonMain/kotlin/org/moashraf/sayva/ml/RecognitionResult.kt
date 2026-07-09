@@ -22,4 +22,31 @@ data class RecognitionResult(
     val inferenceNanos: Long = 0L,
     /** Nanoseconds spent inside the postprocessor — raw output → class + prob. */
     val postprocessingNanos: Long = 0L,
+    /**
+     * Top-K predicted classes sorted by softmax probability descending. The
+     * winner is `topK.firstOrNull()` (also `classIndex` / `confidence`).
+     * Populated by postprocessors that can enumerate multiple candidates;
+     * empty for adapters that only expose a top-1.
+     *
+     * Consumers use this for the developer HUD's top-5 panel and for
+     * ambiguity-sensitive UX (e.g. showing "Did you mean X or Y?" when the
+     * top two are close). Cheap to compute — one sort over N classes.
+     */
+    val topK: List<ClassProbability> = emptyList(),
+    /**
+     * The exact input the model runtime saw for this recognition — after
+     * the preprocessor ran. Enables per-frame train/serve comparison
+     * (dump this vector, feed it to Python's model, check whether the
+     * logits/argmax match).
+     *
+     * Populated by [ComposedSignRecognizer] and only surfaced to the UI
+     * through the developer HUD; null on adapters that don't instrument.
+     */
+    val preprocessedInput: FloatArray? = null,
+)
+
+/** One (class index, softmax probability) pair. */
+data class ClassProbability(
+    val classIndex: Int,
+    val probability: Float,
 )

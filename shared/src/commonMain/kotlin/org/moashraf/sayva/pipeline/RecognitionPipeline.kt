@@ -337,6 +337,8 @@ class DefaultRecognitionPipeline(
             val preprocessingNanos: Long
             val inferenceNanos: Long
             val postprocessingNanos: Long
+            val preprocessedFeatures: FloatArray?
+            val rawLandmarksForDiagnostics: FloatArray?
 
             if (detection.hands.isEmpty()) {
                 // No hand this frame — still emit a heartbeat so diagnostics update.
@@ -344,6 +346,8 @@ class DefaultRecognitionPipeline(
                 preprocessingNanos = 0L
                 inferenceNanos = 0L
                 postprocessingNanos = 0L
+                preprocessedFeatures = null
+                rawLandmarksForDiagnostics = null
             } else {
                 // Assemble model input. Single-hand: use the first detected hand's
                 // 42 floats. Two-hand: concatenate `[left, right]` with zero-fill
@@ -358,6 +362,12 @@ class DefaultRecognitionPipeline(
                 inferenceNanos = result.inferenceNanos
                 postprocessingNanos = result.postprocessingNanos
                 prediction = buildPrediction(pack, model, result)
+                preprocessedFeatures = result.preprocessedInput
+                // The raw diagnostic landmarks are the PRIMARY hand's
+                // pixel-scale (x, y) pairs BEFORE the pack preprocessor.
+                // Two-hand packs still surface the primary hand — enough
+                // for the skeleton overlay + exported-sample check.
+                rawLandmarksForDiagnostics = detection.hands.first().landmarks
             }
 
             val totalEnd = timeNanos()
@@ -373,6 +383,10 @@ class DefaultRecognitionPipeline(
                 postprocessingNanos = postprocessingNanos,
                 handsDetected = detection.hands.size,
                 primaryHandedness = detection.hands.firstOrNull()?.handedness,
+                rawLandmarks = rawLandmarksForDiagnostics,
+                preprocessedFeatures = preprocessedFeatures,
+                sourceFrameWidthPx = frame.widthPx,
+                sourceFrameHeightPx = frame.heightPx,
                 confidence = prediction?.confidence,
                 fps = updateFps(totalEnd),
             )
@@ -485,6 +499,7 @@ class DefaultRecognitionPipeline(
             bucket = model.confidenceThresholds.bucketFor(result.confidence),
             label = labelResult.label,
             effectiveOutputCode = labelResult.effectiveOutputCode,
+            topK = result.topK,
         )
     }
 

@@ -17,6 +17,7 @@ import org.moashraf.sayva.camera.CameraLens
 import org.moashraf.sayva.clipboard.Clipboard
 import org.moashraf.sayva.data.repository.FavoritesRepository
 import org.moashraf.sayva.data.repository.SettingsRepository
+import org.moashraf.sayva.diagnostics.DiagnosticSampleWriter
 import org.moashraf.sayva.languagepack.LanguagePackController
 import org.moashraf.sayva.languagepack.RecognitionRole
 import org.moashraf.sayva.languagepack.SignRecognizerFactory
@@ -368,4 +369,139 @@ class LiveCameraViewModel(
         is RecognitionUiState.Paused -> prediction?.label
         else -> null
     }
+
+    // -----------------------------------------------------------------------
+    // Developer-mode diagnostics — save a per-frame sample for Python-side
+    // comparison via `test_golden_inference.py`.
+    // -----------------------------------------------------------------------
+
+    private val _lastSavedSamplePath = MutableStateFlow<String?>(null)
+    /** Absolute path of the last diagnostic sample the user saved, or `null`
+     *  before the first save. Screen surfaces this as a toast-style caption. */
+    val lastSavedSamplePath: StateFlow<String?> = _lastSavedSamplePath.asStateFlow()
+
+    /**
+     * Dump the current frame's diagnostics — raw landmarks, preprocessed
+     * features, top-5 candidates, pack + model identity — to a JSON file in
+     * the app's external files dir. Format matches `golden_inference.json`
+     * one-case-per-file so it drops straight into Python's regression
+     * pipeline. No-op when there's no live prediction.
+     */
+    fun saveDiagnosticSample() {
+        val recognizing = state.value as? RecognitionUiState.Recognizing
+            ?: state.value as? RecognitionUiState.Paused
+            ?: return
+        val (packCode, modelId, prediction, diagnostics) = when (recognizing) {
+            is RecognitionUiState.Recognizing -> Sample(
+                recognizing.packCode, recognizing.modelId,
+                recognizing.prediction, recognizing.diagnostics,
+            )
+            is RecognitionUiState.Paused -> Sample(
+                recognizing.packCode, recognizing.modelId,
+                recognizing.prediction, recognizing.diagnostics,
+            )
+            else -> return
+        }
+        if (prediction == null || diagnostics.rawLandmarks == null ||
+            diagnostics.preprocessedFeatures == null
+        ) return
+
+        // Look up the pack so we can include its version + model version in
+        // the file — this is exactly what Python's golden fixture pins.
+        val pack = (packController.state.value as? LanguagePackController.State.Ready)
+            ?.availablePacks?.firstOrNull { it.recognitionCode == packCode }
+        val model = pack?.modelById(modelId)
+        val json = buildSampleJson(
+            packCode = packCode,
+            packVersion = pack?.version ?: "unknown",
+            modelId = modelId,
+            modelFile = model?.modelFile ?: "unknown",
+            modelIntegritySha = model?.integrity?.sha256,
+            prediction = prediction,
+            diagnostics = diagnostics,
+            vocabOrder = model?.vocabulary?.signs?.map { it.id } ?: emptyList(),
+        )
+        val fileName = "sample_${packCode}_${modelId}_${prediction.sign.id}_" +
+            "${diagnostics.hashCode().toUInt().toString(16)}.json"
+        val path = runCatching { DiagnosticSampleWriter.write(fileName, json) }
+            .onFailure { crashReporter.log("saveDiagnosticSample failed: ${it.message}") }
+            .getOrNull() ?: return
+        _lastSavedSamplePath.value = path
+        crashReporter.log("Diagnostic sample saved: $path")
+    }
+
+    private data class Sample(
+        val packCode: String,
+        val modelId: String,
+        val prediction: org.moashraf.sayva.pipeline.Prediction?,
+        val diagnostics: org.moashraf.sayva.ml.PipelineDiagnostics,
+    )
+
+    /** Hand-rolled JSON builder. kotlinx.serialization here would pull the
+     *  Prediction/Diagnostics types into the serialization module in a way
+     *  that changes their contract for a diagnostic-only dump — cheaper to
+     *  emit exactly the shape golden_inference.json uses. */
+    private fun buildSampleJson(
+        packCode: String,
+        packVersion: String,
+        modelId: String,
+        modelFile: String,
+        modelIntegritySha: String?,
+        prediction: org.moashraf.sayva.pipeline.Prediction,
+        diagnostics: org.moashraf.sayva.ml.PipelineDiagnostics,
+        vocabOrder: List<String>,
+    ): String {
+        val raw = diagnostics.rawLandmarks!!
+        val features = diagnostics.preprocessedFeatures!!
+        val topK = prediction.topK
+        return buildString {
+            append('{')
+            append("\"captured_at_epoch_ms\":").append(currentEpochMs()).append(',')
+            append("\"pack_code\":\"").append(packCode).append("\",")
+            append("\"pack_version\":\"").append(packVersion).append("\",")
+            append("\"model_id\":\"").append(modelId).append("\",")
+            append("\"model_file\":\"").append(modelFile).append("\",")
+            if (modelIntegritySha != null) {
+                append("\"model_integrity_sha256\":\"").append(modelIntegritySha).append("\",")
+            }
+            append("\"source_frame_width_px\":").append(diagnostics.sourceFrameWidthPx).append(',')
+            append("\"source_frame_height_px\":").append(diagnostics.sourceFrameHeightPx).append(',')
+            append("\"vocab_order\":[")
+            vocabOrder.forEachIndexed { i, id ->
+                if (i > 0) append(',')
+                append('"').append(id).append('"')
+            }
+            append("],")
+            // Raw landmarks as pairs matching golden_inference.json's shape.
+            append("\"raw_landmarks_21\":[")
+            for (i in 0 until 21) {
+                if (i > 0) append(',')
+                append('[').append(raw[i * 2].toInt()).append(',')
+                    .append(raw[i * 2 + 1].toInt()).append(']')
+            }
+            append("],")
+            append("\"features_42\":[")
+            for (i in features.indices) {
+                if (i > 0) append(',')
+                append(features[i])
+            }
+            append("],")
+            append("\"predicted_class_index\":").append(prediction.sign.index).append(',')
+            append("\"predicted_sign_id\":\"").append(prediction.sign.id).append("\",")
+            append("\"confidence\":").append(prediction.confidence).append(',')
+            append("\"confidence_bucket\":\"").append(prediction.bucket.name).append("\",")
+            append("\"topK\":[")
+            topK.forEachIndexed { i, cp ->
+                if (i > 0) append(',')
+                append("{\"class_index\":").append(cp.classIndex)
+                append(",\"sign_id\":\"").append(vocabOrder.getOrElse(cp.classIndex) { "?" }).append("\"")
+                append(",\"probability\":").append(cp.probability).append('}')
+            }
+            append("]}")
+        }
+    }
 }
+
+/** Local epoch-millis fetch. Kept out of the class body so it can be
+ *  swapped for a fake in a test without exposing a constructor param. */
+private fun currentEpochMs(): Long = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()

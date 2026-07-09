@@ -63,6 +63,12 @@ class PostprocessorRegistry(
 object ArgmaxConfidencePostprocessor : Postprocessor {
     const val ID: String = "argmax_confidence_v1"
 
+    /** How many candidates to surface via [RecognitionResult.topK]. Five is
+     *  the largest set the developer HUD renders; a Top-5 accuracy metric is
+     *  also the standard second-best signal alongside Top-1 in vocabularies
+     *  this small. */
+    private const val TOP_K: Int = 5
+
     override fun postprocess(rawOutput: FloatArray, vocabulary: SignVocabulary): RecognitionResult {
         require(rawOutput.isNotEmpty()) { "postprocessor received empty model output" }
 
@@ -80,12 +86,46 @@ object ArgmaxConfidencePostprocessor : Postprocessor {
         // Best class contributes exp(0) = 1 exactly; others sum to a value in
         // [n-1 close-to-uniform, ~0 spiky].
         var sumExp = 0.0
-        for (v in rawOutput) sumExp += kotlin.math.exp((v - maxLogit).toDouble())
+        val expShifted = DoubleArray(rawOutput.size)
+        for (i in rawOutput.indices) {
+            val v = kotlin.math.exp((rawOutput[i] - maxLogit).toDouble())
+            expShifted[i] = v
+            sumExp += v
+        }
 
         // 3. Softmax probability of the winner. `sumExp >= 1.0` always
         // (best class contributes 1.0), so no divide-by-zero risk.
         val confidence = (1.0 / sumExp).toFloat()
 
-        return RecognitionResult(classIndex = bestIndex, confidence = confidence)
+        // 4. Top-K by softmax probability. Extract via a k-way partial sort:
+        // cheaper than a full sort for small K (5 out of 24-100 classes) and
+        // avoids allocating N floats when we only surface min(K, N).
+        val k = kotlin.math.min(TOP_K, rawOutput.size)
+        val topK = ArrayList<ClassProbability>(k)
+        // Simple selection: repeat "find the max index not yet taken" K times.
+        // For K=5 and N=24 that's 120 comparisons — negligible vs the model
+        // invocation cost.
+        val taken = BooleanArray(rawOutput.size)
+        repeat(k) {
+            var pickIdx = -1
+            var pickVal = Double.NEGATIVE_INFINITY
+            for (i in expShifted.indices) {
+                if (!taken[i] && expShifted[i] > pickVal) {
+                    pickVal = expShifted[i]
+                    pickIdx = i
+                }
+            }
+            taken[pickIdx] = true
+            topK.add(ClassProbability(
+                classIndex = pickIdx,
+                probability = (pickVal / sumExp).toFloat(),
+            ))
+        }
+
+        return RecognitionResult(
+            classIndex = bestIndex,
+            confidence = confidence,
+            topK = topK,
+        )
     }
 }

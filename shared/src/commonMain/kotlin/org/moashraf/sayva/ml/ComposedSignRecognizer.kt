@@ -50,6 +50,7 @@ class ComposedSignRecognizer(
             preprocessingNanos = preprocessingNanos,
             inferenceNanos = inferenceNanos,
             postprocessingNanos = postprocessingNanos,
+            preprocessedInput = preprocessed,
         )
     }
 

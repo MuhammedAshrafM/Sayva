@@ -46,6 +46,28 @@ data class PipelineDiagnostics(
      * doesn't depend on the active pack.
      */
     val primaryHandedness: Handedness?,
+    /**
+     * Raw 21 (x, y) landmarks for the primary detected hand, flattened as
+     * `[x0, y0, x1, y1, …, x20, y20]` in the pixel-scale coordinate frame
+     * MediaPipe reports (0 ≤ x < frame.widthPx, 0 ≤ y < frame.heightPx).
+     * Null when no hand was detected. Populated for developer-mode
+     * diagnostics — the skeleton overlay draws directly from this.
+     */
+    val rawLandmarks: FloatArray? = null,
+    /**
+     * The exact 42 floats fed into the model runtime, AFTER the pack's
+     * preprocessor ran. For a single-hand pack this is the wrist-relative
+     * max-abs-normalized vector; for a two-hand pack it's `[left_42, right_42]`.
+     * Null when no hand was detected. Populated for developer-mode diagnostics
+     * so the on-device sample-export matches golden_inference.json exactly.
+     */
+    val preprocessedFeatures: FloatArray? = null,
+    /** Width of the frame MediaPipe processed, in pixels. Needed to render
+     *  the developer skeleton overlay against the preview canvas at the
+     *  right scale. */
+    val sourceFrameWidthPx: Int = 0,
+    /** Height of the frame MediaPipe processed. See [sourceFrameWidthPx]. */
+    val sourceFrameHeightPx: Int = 0,
     /** Softmax confidence of the winning class, when a prediction happened. */
     val confidence: Float?,
     /**

@@ -108,4 +108,7 @@ data class Prediction(
     val bucket: ConfidenceBucket,
     val label: String,
     val effectiveOutputCode: String,
+    /** Top-K candidates for the developer HUD's ranked panel.
+     *  Empty when the postprocessor didn't emit alternatives. */
+    val topK: List<org.moashraf.sayva.ml.ClassProbability> = emptyList(),
 )
