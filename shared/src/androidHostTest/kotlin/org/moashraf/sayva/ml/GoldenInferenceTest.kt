@@ -114,6 +114,36 @@ class GoldenInferenceTest {
     }
 
     @Test
+    fun `softmax confidence on pinned logits matches top_softmax on every case`() {
+        // The postprocessor applies softmax before argmax so `confidence` is
+        // a genuine probability (see ArgmaxConfidencePostprocessor's KDoc).
+        // Feeding it the pinned logits must produce the same `top_softmax`
+        // Python computed via numpy — this is what makes the pack manifest's
+        // ConfidenceThresholds (0.60 / 0.90) buckets meaningful.
+        val fixture = loadFixture()
+        val vocab = org.moashraf.sayva.languagepack.SignVocabulary(
+            version = 1,
+            signs = fixture.vocabOrder.mapIndexed { i, id ->
+                org.moashraf.sayva.languagepack.VocabSign(
+                    index = i, id = id, tags = emptyList(),
+                )
+            },
+        )
+        for (case in fixture.cases) {
+            val logits = FloatArray(case.logits24.size) { case.logits24[it].toFloat() }
+            val result = ArgmaxConfidencePostprocessor.postprocess(logits, vocab)
+            val delta = kotlin.math.abs(result.confidence - case.topSoftmax.toFloat())
+            // 1e-4 tolerance — softmax is float32 on Kotlin, float64 on Python.
+            assertTrue(
+                delta <= 1e-4,
+                "case ${case.signId}: softmax confidence drifted " +
+                    "${result.confidence} vs pinned ${case.topSoftmax} " +
+                    "(delta $delta > 1e-4)",
+            )
+        }
+    }
+
+    @Test
     fun `every fixture case reports a non-degenerate feature vector`() {
         // Sanity: catch a fixture regenerated from a zero-input degenerate
         // case (pre_process_landmark returns all zeros when max abs is 0).
@@ -191,4 +221,5 @@ private data class GoldenCase(
     val logits24: List<Double> get() = logits_24
     val topClassIndex: Int get() = top_class_index
     val topClassId: String get() = top_class_id
+    val topSoftmax: Double get() = top_softmax
 }

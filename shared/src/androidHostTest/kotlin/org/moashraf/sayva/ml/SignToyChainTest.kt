@@ -42,9 +42,12 @@ class SignToyChainTest {
         val pack = loadAsePack()
         val model = pack.modelById("temporal_v1")!!
 
+        // Emit LOGITS with class 1 dominant. After softmax over 5 classes,
+        // logit=4.0 vs zeros yields ~93% for the winner — enough to prove
+        // routing without pinning to a magic value.
         val runtime = FakeSequenceRuntime(
             expectedElements = model.expectedInputElements,
-            output = floatArrayOf(0.05f, 0.6f, 0.1f, 0.15f, 0.1f),
+            output = floatArrayOf(0f, 4f, 0f, 0f, 0f),
         )
         val recognizer = ComposedSignRecognizer(
             runtime = runtime,
@@ -56,7 +59,12 @@ class SignToyChainTest {
         val flat = FloatArray(30 * 84) { i -> i.toFloat() * 0.001f }
         val result = recognizer.recognize(flat)
         assertEquals(1, result.classIndex)
-        assertEquals(0.6f, result.confidence)
+        // Softmax confidence is a proper probability in (0.5, 1] for a
+        // clearly-dominant logit; range guard beats a magic number.
+        assertTrue(
+            result.confidence > 0.5f && result.confidence <= 1.0f,
+            "softmax confidence expected in (0.5, 1.0], got ${result.confidence}",
+        )
         val sign = model.vocabulary.byIndex(result.classIndex)
         assertNotNull(sign)
         assertEquals("THANK_YOU", sign.id)

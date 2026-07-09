@@ -36,11 +36,17 @@ class ModelRuntimeSmokeTest {
 
     @Test
     fun `argmax picks the highest-probability class`() {
-        val runtime = FakeModelRuntime(output = floatArrayOf(0.05f, 0.90f, 0.05f))
+        // Emit LOGITS. Dominant logit 5.0 over 3 classes softmaxes to ~99%,
+        // so the winning-class semantic holds while the confidence value is
+        // whatever softmax produces (checked as a range).
+        val runtime = FakeModelRuntime(output = floatArrayOf(0f, 5f, 0f))
         val recognizer = build(runtime)
         val result = recognizer.recognize(DUMMY_42_INPUT)
         assertEquals(1, result.classIndex)
-        assertEquals(0.90f, result.confidence)
+        assertTrue(
+            result.confidence > 0.9f && result.confidence <= 1.0f,
+            "softmax confidence expected in (0.9, 1.0], got ${result.confidence}",
+        )
     }
 
     @Test

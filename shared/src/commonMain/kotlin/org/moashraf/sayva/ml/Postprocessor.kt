@@ -33,29 +33,59 @@ class PostprocessorRegistry(
 }
 
 /**
- * Standard MVP postprocessor: argmax over the raw output, treating the
- * corresponding element as a confidence score. If the model doesn't emit
- * a softmax head, callers should chain a softmax preprocessor into the
- * runtime — but every model we've shipped so far ends with a softmax
- * layer, so raw output IS a probability distribution.
+ * Standard MVP postprocessor: numerically-stable softmax over the raw
+ * model output, then argmax. The winning class's softmax probability is
+ * returned as `confidence`.
  *
- * Ties resolve to the earliest index — matches the [TfliteSignRecognizer]
- * behavior the previous batch shipped, so no user-visible change from the
- * refactor.
+ * ### Why the softmax step exists
+ * Every model we ship emits raw **logits** — the trained networks end at
+ * `Linear(N)` with no softmax layer (see `FingerspellingMLP.forward` +
+ * the ONNX export whose output tensor is literally named `"logits"`).
+ * Argmax over logits is mathematically identical to argmax over softmax
+ * (softmax is monotonic), so the WINNING CLASS is correct either way.
+ *
+ * The confidence VALUE is what softmax fixes: raw logits are unbounded
+ * reals (e.g. `12.5`, `-3.1`), so treating them as `[0, 1]` probabilities
+ * makes the pack manifest's `ConfidenceThresholds` (0.60 / 0.90 buckets)
+ * meaningless. Softmax here restores the documented contract: `confidence`
+ * IS a probability, and the bucket cutoffs work as designed.
+ *
+ * ### Numerical stability
+ * We subtract the max logit before exponentiation. This prevents `exp` of
+ * very large positive values from overflowing to `Inf`, without changing
+ * the softmax result (`exp(x-c) / Σ exp(xᵢ-c) = exp(x) / Σ exp(xᵢ)`).
+ *
+ * ### Ties
+ * Resolve to the earliest index — matches the previous behavior so the
+ * softmax-introduction is a pure confidence-semantics fix, not a
+ * class-selection change.
  */
 object ArgmaxConfidencePostprocessor : Postprocessor {
     const val ID: String = "argmax_confidence_v1"
 
     override fun postprocess(rawOutput: FloatArray, vocabulary: SignVocabulary): RecognitionResult {
         require(rawOutput.isNotEmpty()) { "postprocessor received empty model output" }
+
+        // 1. Argmax + max — one pass over the input.
         var bestIndex = 0
-        var bestProb = rawOutput[0]
+        var maxLogit = rawOutput[0]
         for (i in 1 until rawOutput.size) {
-            if (rawOutput[i] > bestProb) {
+            if (rawOutput[i] > maxLogit) {
                 bestIndex = i
-                bestProb = rawOutput[i]
+                maxLogit = rawOutput[i]
             }
         }
-        return RecognitionResult(classIndex = bestIndex, confidence = bestProb)
+
+        // 2. Numerically-stable softmax denominator: sum of exp(logit - max).
+        // Best class contributes exp(0) = 1 exactly; others sum to a value in
+        // [n-1 close-to-uniform, ~0 spiky].
+        var sumExp = 0.0
+        for (v in rawOutput) sumExp += kotlin.math.exp((v - maxLogit).toDouble())
+
+        // 3. Softmax probability of the winner. `sumExp >= 1.0` always
+        // (best class contributes 1.0), so no divide-by-zero risk.
+        val confidence = (1.0 / sumExp).toFloat()
+
+        return RecognitionResult(classIndex = bestIndex, confidence = confidence)
     }
 }

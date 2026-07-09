@@ -76,11 +76,13 @@ class FullChainTest {
         val pack = loadAsePack()
         val fs = pack.modelById("fingerspelling")!!
 
-        // 24-class output pretending "B" is the top class.
+        // 24-class LOGITS with "B" as the dominant class. The postprocessor
+        // applies softmax; a logit of 6.0 vs 0.0s gives ~99.4% confidence
+        // after softmax on 24 classes — enough to prove the argmax is B.
         val fakeRuntime = FakeModelRuntime(
             outputSize = fs.vocabulary.size,
             dominantIndex = 1,
-            dominantProb = 0.87f,
+            dominantLogit = 6.0f,
         )
         val recognizer = ComposedSignRecognizer(
             runtime = fakeRuntime,
@@ -103,7 +105,14 @@ class FullChainTest {
         val sign = fs.vocabulary.byIndex(result.classIndex)
         assertNotNull(sign)
         assertEquals("B", sign.id)
-        assertEquals(0.87f, result.confidence)
+        // Softmax over these logits (logit=6 dominant, 23 zeros) yields
+        // e^6 / (e^6 + 23) ~= 0.946 for the winner. Assert a range so the
+        // test verifies "confidence is a proper probability driven by the
+        // dominant logit," not a magic value.
+        assertTrue(
+            result.confidence > 0.9f && result.confidence <= 1.0f,
+            "softmax confidence expected in (0.9, 1.0], got ${result.confidence}",
+        )
     }
 
     private suspend fun loadAsePack() =
@@ -112,10 +121,17 @@ class FullChainTest {
             .byRecognitionCode("ase")
             ?: error("ASE pack not found on classpath")
 
+    /**
+     * Emits raw LOGITS (not probabilities) — matching what real trained
+     * models emit at the TFLite output and what the postprocessor is now
+     * spec'd to consume. `dominantLogit` sets the winner's logit; every
+     * other class is zero. After softmax that yields a probability
+     * distribution roughly = { winner: e^L / (e^L + N-1), others: 1 / (e^L + N-1) }.
+     */
     private class FakeModelRuntime(
         private val outputSize: Int,
         private val dominantIndex: Int,
-        private val dominantProb: Float,
+        private val dominantLogit: Float,
     ) : ModelRuntime {
         var calls = 0
             private set
@@ -125,8 +141,7 @@ class FullChainTest {
         override fun invoke(input: FloatArray): FloatArray {
             calls++
             lastInput = input.copyOf()
-            val other = (1f - dominantProb) / (outputSize - 1)
-            return FloatArray(outputSize) { if (it == dominantIndex) dominantProb else other }
+            return FloatArray(outputSize) { if (it == dominantIndex) dominantLogit else 0f }
         }
         override fun close() {}
     }
